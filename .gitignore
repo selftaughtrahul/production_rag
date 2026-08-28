@@ -1,0 +1,39 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Vector DB & Storage
+data/
+chroma_db/
+*.db
+*.sqlite3
+
+# Temporary / uploaded files
+documents/temp/
+*.pdf
+*.csv
+*.xlsx
+*.docx
+*.pptx
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
