@@ -9,9 +9,12 @@ class ChromaVectorStore(VectorStore):
 
     def __init__(
         self,
-        persist_directory: str,
+        persist_directory: str | None,
         collection_name: str,
         embedding_dimension: int,
+        *,
+        host: str | None = None,
+        port: int | None = None,
     ) -> None:
 
         if embedding_dimension <= 0:
@@ -19,7 +22,10 @@ class ChromaVectorStore(VectorStore):
 
         self.embedding_dimension = embedding_dimension
 
-        self.client = chromadb.PersistentClient(path=persist_directory)
+        if host:
+            self.client = chromadb.HttpClient(host=host, port=port or 8000)
+        else:
+            self.client = chromadb.PersistentClient(path=persist_directory or "data/chroma_db")
 
         self.collection = self.client.get_or_create_collection(
             name=collection_name,

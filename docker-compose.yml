@@ -1,0 +1,64 @@
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: basic_rag_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: basic_rag_chroma
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/data
+    restart: always
+
+  api:
+    build: .
+    container_name: basic_rag_api
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./documents:/app/documents
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+    depends_on:
+      - redis
+      - chroma
+    restart: always
+
+  celery_worker:
+    build: .
+    container_name: basic_rag_celery_worker
+    command: celery -A app.celery_app worker --loglevel=info -P solo
+    volumes:
+      - .:/app
+      - ./documents:/app/documents
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+    depends_on:
+      - redis
+      - chroma
+    restart: always
+
+volumes:
+  redis_data:
+  chroma_data:

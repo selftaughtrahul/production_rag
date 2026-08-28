@@ -1,22 +1,9 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from app.vectorstore.chroma import ChromaVectorStore
-from app.pipeline.pipeline import IngestionPipeline
-from app.ingestion.documnent_loader import DocumentLoaderLibrary, DocumentLoaderCustom
-from app.ingestion.data_cleaning import DataCleaningLibrary, DataCleaningCustom
-from app.ingestion.chunker import (
-    RecursiveCharacterTextSplitter,
-    ChunkerService,
-    FixedSizeChunkingStrategy,
-    RecursiveChunkingStrategy,
-    LangChainRecursiveStrategy,
-)
-from app.ingestion.embedding import (
-    OpenAIEmbeddingProvider,
-    HuggingFaceEmbeddingProvider,
-    EmbeddingService,
-)
+from app.tasks import ingest_document_task
+from celery.result import AsyncResult
+from app.api.query import router as query_router
 
 
 app = FastAPI(
@@ -25,9 +12,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-cleaner = DataCleaningLibrary()
-chunker = ChunkerService(strategy=LangChainRecursiveStrategy())
-embedder = EmbeddingService(provider=HuggingFaceEmbeddingProvider())
+app.include_router(query_router)
 
 
 def save_file(file, content):
@@ -52,7 +37,7 @@ async def ingest_document(
     file: UploadFile = File(...),
 ):
     """
-    Upload a document and ingest it into the vector database.
+    Upload a document and start background ingestion.
     """
 
     if not file.filename:
@@ -69,57 +54,47 @@ async def ingest_document(
             detail="Uploaded file is empty",
         )
 
-    # --------------------------------------------------
-    # 2. Save temporary file
-    # --------------------------------------------------
+    # 1. Save temporary file
     temp_file_path = save_file(file, content)
 
-    # --------------------------------------------------
-    # 3. Create vector store
-    # --------------------------------------------------
-    vector_store = ChromaVectorStore(
-        persist_directory="data/chroma_db",
-        collection_name="rag",
-        embedding_dimension=384,
-    )
+    # 2. Trigger background ingestion task
+    is_linux = False
+    if is_linux:
+        task = ingest_document_task.delay(temp_file_path)
+        return {
+            "success": True,
+            "message": "Document upload successful. Ingestion started in the background.",
+            "filename": file.filename,
+            "task_id": task.id,
+            "status": task.status,
+        }
 
-    # --------------------------------------------------
-    # 4. Create pipeline dependencies
-    # --------------------------------------------------
-    loader = DocumentLoaderLibrary(source=temp_file_path)
+    else:
+        from app.dependencies import build_ingestion_pipeline
 
-    # --------------------------------------------------
-    # 5. Create ingestion pipeline
-    # --------------------------------------------------
+        build_ingestion_pipeline(source=temp_file_path).ingest(source=temp_file_path)
+        return {
+            "success": True,
+            "message": "Document upload successful",
+            "filename": file.filename,
+        }
 
-    pipeline = IngestionPipeline(
-        loader=loader,
-        cleaner=cleaner,
-        chunker=chunker,
-        embedder=embedder,
-        vector_store=vector_store,
-    )
 
-    # --------------------------------------------------
-    # 6. Run ingestion
-    # --------------------------------------------------
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    """
+    Get the status and result of a background ingestion task.
+    """
+    task_result = AsyncResult(task_id, app=ingest_document_task.app)
 
-    result = await pipeline.ingest(
-        source=temp_file_path,
-    )
-
-    return {
-        "success": True,
-        "message": "Document ingested successfully",
-        "filename": file.filename,
-        "result": result,
+    response = {
+        "task_id": task_id,
+        "status": task_result.status,
     }
 
-    # except HTTPException:
-    #     raise
+    if task_result.status == "SUCCESS":
+        response["result"] = task_result.result
+    elif task_result.status == "FAILURE":
+        response["error"] = str(task_result.info)
 
-    # except Exception as exc:
-    #     raise HTTPException(
-    #         status_code=500,
-    #         detail=f"Document ingestion failed: {exc}",
-    #     )
+    return response

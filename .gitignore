@@ -12,7 +12,6 @@ ENV/
 
 # Environment variables & secrets
 .env
-.env.*
 !.env.example
 
 # Vector DB & Storage

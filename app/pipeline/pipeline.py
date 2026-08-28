@@ -22,7 +22,7 @@ class IngestionPipeline:
         self.embedder = embedder
         self.vector_store = vector_store
 
-    async def ingest(
+    def ingest(
         self,
         source: str,
     ) -> dict:
