@@ -120,19 +120,16 @@ Question:
         """
 
         prompt = f"""
-Rewrite the following user question so that it is
-better suited for semantic search over a document
-knowledge base.
+Given a user query, output a concise and direct search query optimized for semantic and keyword retrieval over technical documentation.
 
 Original question:
 {question}
 
-Rules:
-- Preserve the original meaning.
-- Make the question specific and clear.
-- Add useful terminology when appropriate.
-- Do not answer the question.
-- Return ONLY the rewritten question.
+Guidelines:
+- Keep the rewritten query concise (under 8-12 words).
+- Focus on key concepts and technical synonyms.
+- Do NOT turn it into a long introductory sentence.
+- Return ONLY the search query string.
 """
 
         rewritten_question = self.generate_text(

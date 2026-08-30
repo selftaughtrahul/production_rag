@@ -31,10 +31,10 @@ class RAGNodes:
             0,
         )
 
-        # Retrieve a larger candidate set
+        # Retrieve candidate set
         documents = self.retriever.retrieve(
             query=query,
-            top_k=20,
+            top_k=10,
         )
 
         print(f"Retrieved {len(documents)} documents")
@@ -111,6 +111,7 @@ class RAGNodes:
 
             return {"documents_relevant": False}
 
+        # Keep documents with positive rerank relevance, or fallback to top-3 if below threshold
         relevant_documents = [
             doc
             for doc in documents
@@ -118,15 +119,18 @@ class RAGNodes:
                 "rerank_score",
                 0.0,
             )
-            >= 0.5
+            >= -1.0
         ]
 
+        is_relevant = len(relevant_documents) > 0
+        final_docs = relevant_documents if is_relevant else documents[:3]
+
         if observer:
-            observer.on_documents_graded(len(relevant_documents))
+            observer.on_documents_graded(len(final_docs))
 
         return {
-            "documents": relevant_documents,
-            "documents_relevant": bool(relevant_documents),
+            "documents": final_docs,
+            "documents_relevant": is_relevant,
         }
 
     def rewrite_query(

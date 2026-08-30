@@ -57,9 +57,12 @@ def get_embedding_provider(
 
 
 @lru_cache(maxsize=1)
-def get_cross_encoder_model() -> CrossEncoder:
-    print("Loading cross encoder model...")
-    return CrossEncoder("BAAI/bge-reranker-v2-m3")
+def get_cross_encoder_model(
+    model: str,
+    device: str | None = None,
+) -> CrossEncoder:
+    print(f"Loading cross encoder model: {model}...")
+    return CrossEncoder(model, device=device)
 
 
 @lru_cache(maxsize=1)
@@ -118,8 +121,13 @@ def get_rag_graph():
         vector_store=components.vector_store,
     )
 
+    settings = Settings.from_environment()
     context_builder = ContextBuilder()
-    reranker = CrossEncoderReranker(model=get_cross_encoder_model())
+    reranker_model = get_cross_encoder_model(
+        model=settings.reranker_model,
+        device=settings.embedding_device,
+    )
+    reranker = CrossEncoderReranker(model=reranker_model)
 
     llm = ClaudeService()
 

@@ -1,4 +1,4 @@
-﻿"""Central configuration for the RAG application."""
+"""Central configuration for the RAG application."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ class Settings:
     collection_prefix: str
     embedding_model: str
     embedding_device: str | None
+    reranker_model: str
     chunk_size: int
     chunk_overlap: int
     LANGSMITH_TRACING: bool
@@ -47,12 +48,19 @@ class Settings:
                 "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
             ),
             embedding_device=_optional_env("EMBEDDING_DEVICE"),
+            reranker_model=os.getenv(
+                "RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
+            ),
             chunk_size=int(os.getenv("CHUNK_SIZE", "1000")),
             chunk_overlap=int(os.getenv("CHUNK_OVERLAP", "200")),
-            LANGSMITH_TRACING=os.getenv("LANGSMITH_TRACING"),
-            LANGSMITH_API_KEY=os.getenv("LANGSMITH_API_KEY"),
-            LANGSMITH_PROJECT=os.getenv("LANGSMITH_PROJECT"),
-            LANGSMITH_ENDPOINT=os.getenv("LANGSMITH_ENDPOINT"),
+            LANGSMITH_TRACING=bool(
+                os.getenv("LANGSMITH_TRACING", "false").lower() == "true"
+            ),
+            LANGSMITH_API_KEY=os.getenv("LANGSMITH_API_KEY", ""),
+            LANGSMITH_PROJECT=os.getenv("LANGSMITH_PROJECT", "default"),
+            LANGSMITH_ENDPOINT=os.getenv(
+                "LANGSMITH_ENDPOINT", "https://api.smith.langchain.com"
+            ),
         )
 
     def collection_name_for(self, embedding_dimension: int) -> str:
