@@ -7,7 +7,7 @@ celery_app = Celery(
     "basic_rag",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["app.tasks"],
+    include=["app.tasks.tasks"],
 )
 
 celery_app.conf.update(
