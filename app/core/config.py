@@ -1,4 +1,5 @@
 ﻿"""Central configuration for the RAG application."""
+
 from __future__ import annotations
 
 import os
@@ -28,18 +29,30 @@ class Settings:
     embedding_device: str | None
     chunk_size: int
     chunk_overlap: int
+    LANGSMITH_TRACING: bool
+    LANGSMITH_API_KEY: str
+    LANGSMITH_PROJECT: str
+    LANGSMITH_ENDPOINT: str
 
     @classmethod
     def from_environment(cls) -> "Settings":
         return cls(
             chroma_host=_optional_env("CHROMA_HOST"),
             chroma_port=int(os.getenv("CHROMA_PORT", "8000")),
-            chroma_persist_directory=os.getenv("CHROMA_PERSIST_DIRECTORY", "data/chroma_db"),
+            chroma_persist_directory=os.getenv(
+                "CHROMA_PERSIST_DIRECTORY", "data/chroma_db"
+            ),
             collection_prefix=os.getenv("RAG_COLLECTION_PREFIX", "rag"),
-            embedding_model=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            embedding_model=os.getenv(
+                "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+            ),
             embedding_device=_optional_env("EMBEDDING_DEVICE"),
             chunk_size=int(os.getenv("CHUNK_SIZE", "1000")),
             chunk_overlap=int(os.getenv("CHUNK_OVERLAP", "200")),
+            LANGSMITH_TRACING=os.getenv("LANGSMITH_TRACING"),
+            LANGSMITH_API_KEY=os.getenv("LANGSMITH_API_KEY"),
+            LANGSMITH_PROJECT=os.getenv("LANGSMITH_PROJECT"),
+            LANGSMITH_ENDPOINT=os.getenv("LANGSMITH_ENDPOINT"),
         )
 
     def collection_name_for(self, embedding_dimension: int) -> str:
