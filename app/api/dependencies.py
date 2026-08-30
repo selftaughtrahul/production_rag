@@ -2,37 +2,38 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from app.retriever.reranker import CrossEncoderReranker
-from app.config import Settings
+from app.services.retriever.reranker import CrossEncoderReranker
+from app.core.config import Settings
+from sentence_transformers import CrossEncoder
 
-from app.ingestion.chunker import (
+from app.services.ingestion.chunker import (
     ChunkerService,
     LangChainRecursiveStrategy,
 )
 
-from app.ingestion.data_cleaning import (
+from app.services.ingestion.data_cleaning import (
     DataCleaningLibrary,
 )
 
-from app.ingestion.documnent_loader import (
+from app.services.ingestion.documnent_loader import (
     DocumentLoaderLibrary,
 )
 
-from app.ingestion.embedding import (
+from app.services.ingestion.embedding import (
     EmbeddingService,
     HuggingFaceEmbeddingProvider,
 )
 
-from app.llm.claude import ClaudeService
+from app.services.llm.claude import ClaudeService
 
 from app.pipeline.pipeline import IngestionPipeline
 
-from app.retriever.context import ContextBuilder
-from app.retriever.service import RetrieverService
+from app.services.retriever.context import ContextBuilder
+from app.services.retriever.service import RetrieverService
 
-from app.vectorstore.chroma import ChromaVectorStore
+from app.services.vectorstore.chroma import ChromaVectorStore
 
-from app.rag.graph import build_rag_graph
+from app.services.rag.graph import build_rag_graph
 
 
 @dataclass(slots=True)
@@ -53,6 +54,12 @@ def get_embedding_provider(
         model=model,
         device=device,
     )
+
+
+@lru_cache(maxsize=1)
+def get_cross_encoder_model() -> CrossEncoder:
+    print("Loading cross encoder model...")
+    return CrossEncoder("BAAI/bge-reranker-v2-m3")
 
 
 @lru_cache(maxsize=1)
@@ -112,7 +119,7 @@ def get_rag_graph():
     )
 
     context_builder = ContextBuilder()
-    reranker = CrossEncoderReranker()
+    reranker = CrossEncoderReranker(model=get_cross_encoder_model())
 
     llm = ClaudeService()
 

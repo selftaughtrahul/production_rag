@@ -1,7 +1,7 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from app.tasks import ingest_document_task
+from app.tasks.tasks import ingest_document_task
 from celery.result import AsyncResult
 from app.api.query import router as query_router
 
@@ -70,7 +70,7 @@ async def ingest_document(
         }
 
     else:
-        from app.dependencies import build_ingestion_pipeline
+        from app.api.dependencies import build_ingestion_pipeline
 
         build_ingestion_pipeline(source=temp_file_path).ingest(source=temp_file_path)
         return {
