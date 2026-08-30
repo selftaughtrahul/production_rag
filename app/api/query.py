@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.dependencies import get_query_service
+from app.dependencies import get_rag_graph
 from app.query.service import QueryService
 
 router = APIRouter(prefix="/query", tags=["Query"])
@@ -14,9 +14,20 @@ class QueryRequest(BaseModel):
 @router.post("/")
 async def query_documents(
     request: QueryRequest,
-    query_service: QueryService = Depends(get_query_service),
+    rag_graph=Depends(get_rag_graph),
 ):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
-    result = query_service.query(question=request.question)
-    return {"success": True, "question": request.question, **result}
+
+    result = rag_graph.invoke(
+        {
+            "question": request.question,
+            "retry_count": 0,
+        }
+    )
+
+    return {
+        "success": True,
+        "question": request.question,
+        "answer": result["answer"],
+    }
