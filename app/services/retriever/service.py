@@ -26,6 +26,7 @@ class RetrieverService(Retriever):
         self,
         query: str,
         top_k: int = 5,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[Any]:
 
         if not query.strip():
@@ -38,6 +39,7 @@ class RetrieverService(Retriever):
         results = self.vector_store.search(
             query_embedding=query_embedding,
             top_k=top_k,
+            metadata_filter=metadata_filter,
         )
 
         return results

@@ -1,8 +1,14 @@
 from __future__ import annotations
+
 from typing import Any
+
 import chromadb
-from .base import VectorStore
-from .models import EmbeddedChunk, SearchResult
+
+from .base import (
+    VectorStore,
+    EmbeddedChunk,
+    SearchResult,
+)
 
 
 class ChromaVectorStore(VectorStore):
@@ -23,9 +29,15 @@ class ChromaVectorStore(VectorStore):
         self.embedding_dimension = embedding_dimension
 
         if host:
-            self.client = chromadb.HttpClient(host=host, port=port or 8000)
+            self.client = chromadb.HttpClient(
+                host=host,
+                port=port or 8000,
+            )
+
         else:
-            self.client = chromadb.PersistentClient(path=persist_directory or "data/chroma_db")
+            self.client = chromadb.PersistentClient(
+                path=persist_directory or "data/chroma_db"
+            )
 
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
@@ -70,15 +82,14 @@ class ChromaVectorStore(VectorStore):
         }
 
         if metadata_filter:
-
             query_kwargs["where"] = self._build_filter(metadata_filter)
 
         results = self.collection.query(**query_kwargs)
 
-        ids = results["ids"][0]
-        documents = results["documents"][0]
-        distances = results["distances"][0]
-        metadatas = results["metadatas"][0]
+        ids = results.get("ids", [])[0]
+        distances = results.get("distances", [])[0]
+        documents = results.get("documents", [])[0]
+        metadatas = results.get("metadatas", [])[0]
 
         return [
             SearchResult(
@@ -95,6 +106,10 @@ class ChromaVectorStore(VectorStore):
             )
         ]
 
+    # =========================================================
+    # DELETE CHUNKS
+    # =========================================================
+
     def delete(
         self,
         chunk_ids: list[str],
@@ -104,6 +119,152 @@ class ChromaVectorStore(VectorStore):
             return
 
         self.collection.delete(ids=chunk_ids)
+
+    def delete_document(
+        self,
+        document_id: str,
+    ) -> int:
+        """
+        Delete all chunks/vectors belonging to a document.
+
+        Example:
+
+            document_id = "abc123"
+
+        This removes:
+
+            abc123_chunk_0
+            abc123_chunk_1
+            abc123_chunk_2
+            ...
+
+        based on the document_id stored in metadata.
+
+        Returns:
+            Number of chunks that existed before deletion.
+        """
+
+        if not document_id.strip():
+
+            raise ValueError("document_id cannot be empty")
+
+        existing = self.collection.get(
+            where={"document_id": document_id},
+            include=[
+                "metadatas",
+            ],
+        )
+
+        chunk_ids = existing.get(
+            "ids",
+            [],
+        )
+
+        if not chunk_ids:
+            return 0
+
+        self.collection.delete(where={"document_id": document_id})
+
+        return len(chunk_ids)
+
+    def count_document_chunks(
+        self,
+        document_id: str,
+    ) -> int:
+        """
+        Count how many chunks belong to a document.
+        """
+
+        if not document_id.strip():
+
+            raise ValueError("document_id cannot be empty")
+
+        result = self.collection.get(
+            where={"document_id": document_id},
+            include=[],
+        )
+
+        return len(
+            result.get(
+                "ids",
+                [],
+            )
+        )
+
+    def document_exists(
+        self,
+        document_id: str,
+    ) -> bool:
+        """
+        Check whether at least one vector/chunk
+        exists for a document.
+        """
+
+        if not document_id.strip():
+
+            raise ValueError("document_id cannot be empty")
+
+        result = self.collection.get(
+            where={"document_id": document_id},
+            include=[],
+        )
+
+        return bool(
+            result.get(
+                "ids",
+                [],
+            )
+        )
+
+    def get_document_chunks(
+        self,
+        document_id: str,
+    ) -> list[dict[str, Any]]:
+        """
+        Return all chunks belonging to a document.
+
+        Useful for debugging and document management.
+        """
+
+        if not document_id.strip():
+
+            raise ValueError("document_id cannot be empty")
+
+        result = self.collection.get(
+            where={"document_id": document_id},
+            include=[
+                "documents",
+                "metadatas",
+            ],
+        )
+
+        ids = result.get(
+            "ids",
+            [],
+        )
+
+        documents = result.get(
+            "documents",
+            [],
+        )
+
+        metadatas = result.get(
+            "metadatas",
+            [],
+        )
+
+        return [
+            {
+                "chunk_id": chunk_id,
+                "text": text,
+                "metadata": metadata or {},
+            }
+            for chunk_id, text, metadata in zip(
+                ids,
+                documents,
+                metadatas,
+            )
+        ]
 
     def count(self) -> int:
 
@@ -126,7 +287,7 @@ class ChromaVectorStore(VectorStore):
         metadata: dict[str, Any],
     ) -> dict[str, Any]:
 
-        sanitized = {}
+        sanitized: dict[str, Any] = {}
 
         for key, value in metadata.items():
 
@@ -135,11 +296,18 @@ class ChromaVectorStore(VectorStore):
 
             if isinstance(
                 value,
-                (str, int, float, bool),
+                (
+                    str,
+                    int,
+                    float,
+                    bool,
+                ),
             ):
+
                 sanitized[key] = value
 
             else:
+
                 sanitized[key] = str(value)
 
         return sanitized
@@ -157,6 +325,7 @@ class ChromaVectorStore(VectorStore):
     ) -> None:
 
         for chunk in chunks:
+
             self._validate_embedding(chunk.embedding)
 
     def _validate_embedding(
