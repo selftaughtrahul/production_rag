@@ -1,7 +1,7 @@
 from __future__ import annotations
-from app.llm.claude import ClaudeService
-from app.retriever.context import ContextBuilder
-from app.retriever.service import RetrieverService
+from app.services.llm.claude import ClaudeService
+from app.services.retriever.context import ContextBuilder
+from app.services.retriever.service import RetrieverService
 
 
 class QueryService:

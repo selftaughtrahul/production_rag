@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.ingestion.embedding import HuggingFaceEmbeddingProvider
-from app.retriever.retriever import Retriever
-from app.vectorstore.chroma import ChromaVectorStore
+from app.services.ingestion.embedding import HuggingFaceEmbeddingProvider
+from app.services.retriever.retriever import Retriever
+from app.services.vectorstore.chroma import ChromaVectorStore
 
 
 class RetrieverService(Retriever):

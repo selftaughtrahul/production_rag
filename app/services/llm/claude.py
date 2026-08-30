@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 
@@ -79,27 +79,23 @@ class ClaudeService:
         self._check_client()
 
         system_prompt = """
-You are a helpful RAG assistant.
+You are an expert, direct, and concise RAG assistant.
 
-Answer the user's question using ONLY the provided context.
+Your task is to answer the user's question using ONLY the facts provided in the Context.
 
-Rules:
-- Do not invent information.
-- If the answer is not present in the context, say that you don't know.
-- Keep the answer clear and concise.
+Guidelines:
+- Provide a single, cohesive, well-structured answer.
+- Do NOT generate multiple responses, alternative versions, simulated dialogue, or section separators (e.g., '=====' or '-----').
+- Do NOT start your response with filler phrases like "Based on the provided context:", "According to the documents:", or "Okay, let me break this down". Start directly with the answer.
+- If the answer cannot be determined from the context, respond with: "I don't have enough information in the provided documents to answer this question."
+- Do not make up facts or extrapolate beyond what is stated.
 """
 
-        user_prompt = f"""
-Context:
-----------------
+        user_prompt = f"""Context:
 {context}
-----------------
 
 Question:
-{question}
-
-Answer:
-"""
+{question}"""
 
         response = self.client.messages.create(
             model=self.model,

@@ -23,3 +23,6 @@ class RAGState(TypedDict, total=False):
 
     # Number of retrieval attempts
     retry_count: int
+
+    # Observability helper
+    observer: Any

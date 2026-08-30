@@ -1,5 +1,5 @@
 from __future__ import annotations
-from app.vectorstore.chroma import ChromaVectorStore
+from app.services.vectorstore.chroma import ChromaVectorStore
 
 
 class IngestionPipeline:

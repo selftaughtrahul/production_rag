@@ -25,9 +25,8 @@ class Reranker(ABC):
 @dataclass
 class CrossEncoderReranker(Reranker):
     """Rerank documents using a cross-encoder model."""
-
-    def __post_init__(self):
-        self.model = CrossEncoder("BAAI/bge-reranker-v2-m3")
+    
+    model: CrossEncoder
 
     def rerank(
         self,

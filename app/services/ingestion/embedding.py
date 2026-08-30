@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from app.vectorstore.models import EmbeddedChunk
+from app.services.vectorstore.models import EmbeddedChunk
 from .chunker import Chunk
 from langchain_openai import OpenAIEmbeddings
 
