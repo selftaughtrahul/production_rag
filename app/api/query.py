@@ -4,6 +4,9 @@ from app.api.dependencies import get_rag_graph, get_hybrid_rag_graph
 from app.models.schemas import QueryRequest, UserInDB
 from app.observability import RAGObserver, RAGEvaluator
 from app.services.auth.dependencies import get_current_user
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langchain_core.messages import HumanMessage, AIMessage
+
 
 router = APIRouter(prefix="/query", tags=["Query"])
 
@@ -21,6 +24,10 @@ def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None
     
     thread_id = generate_new_session_id() if not session_id else session_id
 
+    # Example message content
+
+  
+
     result = rag_graph.invoke(
         {
             "question": question,
@@ -34,7 +41,6 @@ def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None
             "metadata": {"source": "fastapi", "user_id": user_id, "session_id": thread_id},
         },
     )
-
 
     metrics = observer.finish()
     evaluation = evaluator.evaluate(
@@ -125,3 +131,64 @@ async def list_conversations(current_user: UserInDB = Depends(get_current_user))
         return {"success": True, "sessions": []}
     finally:
         conn.close()
+
+@router.get(
+    "/conversations/{session_id}",
+    summary="Get conversation chat history",
+)
+async def get_conversation_history(
+    session_id: str,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """
+    Fetch complete chat history for a specific LangGraph thread/session.
+    """
+
+    config = {
+        "configurable": {
+            "thread_id": session_id,
+        }
+    }
+
+    with SqliteSaver.from_conn_string("rag_database.db") as checkpointer:
+
+        # Get latest checkpoint
+        checkpoint = checkpointer.get(config)
+
+        if not checkpoint:
+            raise HTTPException(
+                status_code=404,
+                detail="Conversation not found",
+            )
+
+        state = checkpoint.get("channel_values", {})
+
+        messages = state.get("messages", [])
+
+        chat_history = []
+
+        for message in messages:
+
+            # LangChain message
+            if hasattr(message, "type"):
+                role = message.type
+            else:
+                role = "unknown"
+
+            if hasattr(message, "content"):
+                content = message.content
+            else:
+                content = str(message)
+
+            chat_history.append(
+                {
+                    "role": role,
+                    "content": content,
+                }
+            )
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "messages": chat_history,
+    }
