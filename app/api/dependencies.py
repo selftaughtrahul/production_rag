@@ -5,34 +5,25 @@ from functools import lru_cache
 from app.services.retriever.reranker import CrossEncoderReranker
 from app.core.config import Settings
 from sentence_transformers import CrossEncoder
-
 from app.services.ingestion.chunker import (
     ChunkerService,
     LangChainRecursiveStrategy,
 )
-
 from app.services.ingestion.data_cleaning import (
     DataCleaningLibrary,
 )
-
 from app.services.ingestion.documnent_loader import (
     DocumentLoaderLibrary,
 )
-
 from app.services.ingestion.embedding import (
     EmbeddingService,
     HuggingFaceEmbeddingProvider,
 )
-
 from app.services.llm.claude import ClaudeService
-
 from app.pipeline.pipeline import IngestionPipeline
-
 from app.services.retriever.context import ContextBuilder
 from app.services.retriever.service import RetrieverService
-
 from app.services.vectorstore.chroma import ChromaVectorStore
-
 from app.services.rag.graph import build_rag_graph
 
 
@@ -43,13 +34,8 @@ class RAGComponents:
 
 
 @lru_cache(maxsize=1)
-def get_embedding_provider(
-    model: str,
-    device: str | None,
-) -> HuggingFaceEmbeddingProvider:
-
+def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddingProvider: #noqa
     print("Loading embedding model...")
-
     return HuggingFaceEmbeddingProvider(
         model=model,
         device=device,
@@ -57,19 +43,14 @@ def get_embedding_provider(
 
 
 @lru_cache(maxsize=1)
-def get_cross_encoder_model(
-    model: str,
-    device: str | None = None,
-) -> CrossEncoder:
+def get_cross_encoder_model(model: str,device: str | None = None,) -> CrossEncoder:
     print(f"Loading cross encoder model: {model}...")
     return CrossEncoder(model, device=device)
 
 
 @lru_cache(maxsize=1)
 def build_components() -> RAGComponents:
-
     settings = Settings.from_environment()
-
     provider = get_embedding_provider(
         settings.embedding_model,
         settings.embedding_device,
@@ -89,14 +70,9 @@ def build_components() -> RAGComponents:
     )
 
 
-def build_ingestion_pipeline(
-    source: str,
-) -> IngestionPipeline:
-
+def build_ingestion_pipeline(source: str,) -> IngestionPipeline:
     settings = Settings.from_environment()
-
     components = build_components()
-
     return IngestionPipeline(
         loader=DocumentLoaderLibrary(source=source),
         cleaner=DataCleaningLibrary(),
