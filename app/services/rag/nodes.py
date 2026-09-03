@@ -3,13 +3,7 @@ from .state import RAGState
 
 class RAGNodes:
 
-    def __init__(
-        self,
-        retriever,
-        reranker,
-        context_builder,
-        llm,
-    ):
+    def __init__(self,retriever,reranker,context_builder,llm,):
         self.retriever = retriever
         self.reranker = reranker
         self.context_builder = context_builder
@@ -21,21 +15,12 @@ class RAGNodes:
 
         question = state["question"]
 
-        query = state.get(
-            "rewritten_question",
-            question,
-        )
+        query = state.get("rewritten_question",question,)
 
-        retry_count = state.get(
-            "retry_count",
-            0,
-        )
+        retry_count = state.get("retry_count",0,)
 
         # Retrieve candidate set
-        documents = self.retriever.retrieve(
-            query=query,
-            top_k=10,
-        )
+        documents = self.retriever.retrieve(query=query,top_k=10,)
 
         print(f"Retrieved {len(documents)} documents")
 
@@ -98,10 +83,7 @@ class RAGNodes:
 
         return {"answer": answer}
 
-    def grade_documents(
-        self,
-        state: RAGState,
-    ):
+    def grade_documents(self,state: RAGState,):
         observer = state.get("observer")
         documents = state.get("documents", [])
 
@@ -133,10 +115,7 @@ class RAGNodes:
             "documents_relevant": is_relevant,
         }
 
-    def rewrite_query(
-        self,
-        state: RAGState,
-    ):
+    def rewrite_query(self,state: RAGState,):
         observer = state.get("observer")
         question = state["question"]
 

@@ -12,18 +12,15 @@ class QueryRequest(BaseModel):
 
 
 @router.post("/")
-async def query_documents(
-    request: QueryRequest,
-    rag_graph=Depends(get_rag_graph),
-):
+async def query_documents(request: QueryRequest,rag_graph=Depends(get_rag_graph),):
+    
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     observer = RAGObserver()
     evaluator = RAGEvaluator()
 
-    result = rag_graph.invoke(
-        {
+    result = rag_graph.invoke({
             "question": request.question,
             "retry_count": 0,
             "observer": observer,

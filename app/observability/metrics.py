@@ -13,23 +13,14 @@ class RAGMetrics:
     """
 
     start_time: float = field(default_factory=time.perf_counter)
-
     retrieved_documents: int = 0
-
     relevant_documents: int = 0
-
     retry_count: int = 0
-
     query_rewritten: bool = False
-
     answer_generated: bool = False
-
     retrieval_latency_ms: float = 0.0
-
     generation_latency_ms: float = 0.0
-
     total_latency_ms: float = 0.0
-
     extra: dict[str, Any] = field(default_factory=dict)
 
     def finish(self) -> None:
@@ -39,11 +30,7 @@ class RAGMetrics:
 
         self.total_latency_ms = (time.perf_counter() - self.start_time) * 1000
 
-    def record_retrieval(
-        self,
-        document_count: int,
-        latency_ms: float | None = None,
-    ) -> None:
+    def record_retrieval(self,document_count: int,latency_ms: float | None = None,) -> None:
         """
         Record retrieval information.
         """
@@ -53,10 +40,7 @@ class RAGMetrics:
         if latency_ms is not None:
             self.retrieval_latency_ms = latency_ms
 
-    def record_grading(
-        self,
-        relevant_count: int,
-    ) -> None:
+    def record_grading(self,relevant_count: int,) -> None:
         """
         Record document grading result.
         """
@@ -77,10 +61,7 @@ class RAGMetrics:
 
         self.retry_count += 1
 
-    def record_generation(
-        self,
-        latency_ms: float | None = None,
-    ) -> None:
+    def record_generation(self,latency_ms: float | None = None,) -> None:
         """
         Record answer generation.
         """
@@ -90,11 +71,7 @@ class RAGMetrics:
         if latency_ms is not None:
             self.generation_latency_ms = latency_ms
 
-    def set_extra(
-        self,
-        key: str,
-        value: Any,
-    ) -> None:
+    def set_extra(self,key: str,value: Any,) -> None:
         """
         Store additional application-specific metadata.
         """

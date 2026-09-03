@@ -46,11 +46,7 @@ class FixedSizeChunkingStrategy(ChunkingStrategy):
     Simple character-based chunking strategy.
     """
 
-    def __init__(
-        self,
-        chunk_size: int = 1000,
-        chunk_overlap: int = 200,
-    ):
+    def __init__(self,chunk_size: int = 1000,chunk_overlap: int = 200,):
         if chunk_size <= 0:
             raise ValueError("chunk_size must be greater than 0")
 
@@ -91,15 +87,7 @@ class RecursiveChunkingStrategy(ChunkingStrategy):
     Splits text using progressively smaller separators.
 
     Priority:
-        paragraphs
-        ↓
-        lines
-        ↓
-        sentences
-        ↓
-        words
-        ↓
-        characters
+        paragraphs ↓ lines ↓ sentences ↓ words ↓ characters
     """
 
     def __init__(
@@ -138,11 +126,7 @@ class RecursiveChunkingStrategy(ChunkingStrategy):
             separators=self.separators,
         )
 
-    def _split_recursive(
-        self,
-        text: str,
-        separators: list[str],
-    ) -> list[str]:
+    def _split_recursive(self,text: str,separators: list[str],) -> list[str]:
 
         if len(text) <= self.chunk_size:
             return [text.strip()] if text.strip() else []
@@ -186,10 +170,7 @@ class RecursiveChunkingStrategy(ChunkingStrategy):
 
         return self._apply_overlap(chunks)
 
-    def _apply_overlap(
-        self,
-        chunks: list[str],
-    ) -> list[str]:
+    def _apply_overlap(self,chunks: list[str],) -> list[str]:
 
         if self.chunk_overlap == 0:
             return chunks
@@ -236,11 +217,7 @@ class LangChainRecursiveStrategy(ChunkingStrategy):
     Adapter around LangChain's recursive splitter.
     """
 
-    def __init__(
-        self,
-        chunk_size: int = 1000,
-        chunk_overlap: int = 200,
-    ):
+    def __init__(self,chunk_size: int = 1000,chunk_overlap: int = 200,):
 
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
@@ -260,18 +237,10 @@ class ChunkerService:
     It delegates chunking to a strategy.
     """
 
-    def __init__(
-        self,
-        strategy: ChunkingStrategy,
-    ):
+    def __init__(self,strategy: ChunkingStrategy,):
         self.strategy = strategy
 
-    def chunk(
-        self,
-        text: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> list[Chunk]:
+    def chunk(self,text: str,*,metadata: dict[str, Any] | None = None,) -> list[Chunk]:
 
         if not isinstance(text, str):
             raise TypeError("text must be a string")

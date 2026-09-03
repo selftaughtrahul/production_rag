@@ -22,15 +22,7 @@ class DataCleaningCustom:
     - Preserves meaningful text for embeddings/retrieval
     """
 
-    def __init__(
-        self,
-        text: str,
-        *,
-        remove_urls: bool = True,
-        remove_emails: bool = True,
-        remove_special_characters: bool = False,
-        lowercase: bool = False,
-    ):
+    def __init__(self,text: str,*,remove_urls: bool = True,remove_emails: bool = True,remove_special_characters: bool = False,lowercase: bool = False,):
         self.text = text
         self.remove_urls = remove_urls
         self.remove_emails = remove_emails
@@ -292,14 +284,9 @@ class DataCleaningLibrary:
         if not text.strip():
             return ""
 
-        # ---------------------------------------------------------
-        # 1. Fix broken Unicode / mojibake
-        # ---------------------------------------------------------
+      
         text = fix_text(text)
 
-        # ---------------------------------------------------------
-        # 2. Clean text using clean-text
-        # ---------------------------------------------------------
         text = clean(
             text,
             fix_unicode=True,
@@ -329,9 +316,6 @@ class DataCleaningLibrary:
             lang="en",
         )
 
-        # ---------------------------------------------------------
-        # 3. Normalize whitespace
-        # ---------------------------------------------------------
         text = self._normalize_whitespace(text)
 
         return text

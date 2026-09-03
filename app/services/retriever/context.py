@@ -8,10 +8,7 @@ class ContextBuilder:
     Converts retrieved chunks into LLM-ready context.
     """
 
-    def build(
-        self,
-        chunks: list[EmbeddedChunk],
-    ) -> str:
+    def build(self,chunks: list[EmbeddedChunk],) -> str:
 
         if not chunks:
             return ""

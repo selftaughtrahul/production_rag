@@ -28,12 +28,7 @@ class CrossEncoderReranker(Reranker):
     
     model: CrossEncoder
 
-    def rerank(
-        self,
-        query: str,
-        documents: list[Any],
-        top_k: int = 5,
-    ) -> list[Any]:
+    def rerank(self,query: str,documents: list[Any],top_k: int = 5, ) -> list[Any]:
 
         if not documents:
             return []

@@ -11,15 +11,7 @@ class TextNormalizer:
     without removing meaningful semantic information.
     """
 
-    def __init__(
-        self,
-        *,
-        lowercase: bool = False,
-        normalize_unicode: bool = True,
-        normalize_whitespace: bool = True,
-        normalize_quotes: bool = True,
-        normalize_dashes: bool = True,
-    ):
+    def __init__(self,*,lowercase: bool = False,normalize_unicode: bool = True,normalize_whitespace: bool = True,normalize_quotes: bool = True, normalize_dashes: bool = True,):
         self.lowercase = lowercase
         self.normalize_unicode = normalize_unicode
         self.normalize_whitespace = normalize_whitespace

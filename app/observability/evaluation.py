@@ -11,17 +11,11 @@ class EvaluationResult:
     """
 
     question: str
-
     answer: str
-
     context: str
-
     answer_present: bool
-
     context_present: bool
-
     passed: bool
-
     details: dict[str, Any]
 
     def as_dict(self) -> dict[str, Any]:
@@ -47,38 +41,14 @@ class RAGEvaluator:
     - Correctness
     """
 
-    def evaluate(
-        self,
-        question: str,
-        answer: str,
-        context: str,
-    ) -> EvaluationResult:
+    def evaluate(self,question: str,answer: str,context: str,) -> EvaluationResult:
 
-        answer_present = bool(
-            answer and answer.strip()
-        )
+        answer_present = bool(answer and answer.strip())
+        context_present = bool(context and context.strip())
 
-        context_present = bool(
-            context and context.strip()
-        )
+        passed = (answer_present and context_present)
 
-        passed = (
-            answer_present
-            and context_present
-        )
-
-        details = {
-            "answer_length": len(
-                answer.strip()
-            )
-            if answer
-            else 0,
-            "context_length": len(
-                context.strip()
-            )
-            if context
-            else 0,
-        }
+        details = {"answer_length": len(answer.strip()) if answer else 0,"context_length": len(context.strip() ) if context else 0}
 
         return EvaluationResult(
             question=question,

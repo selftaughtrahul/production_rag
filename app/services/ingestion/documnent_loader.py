@@ -23,13 +23,7 @@ class DocumentLoaderCustom:
     load() method to the rest of the application.
     """
 
-    SUPPORTED_EXTENSIONS = {
-        ".txt",
-        ".pdf",
-        ".md",
-        ".csv",
-        ".json",
-    }
+    SUPPORTED_EXTENSIONS = {".txt",".pdf",".md",".csv",".json"}
 
     def __init__(self, source: str | Path):
         self.source = Path(source)
@@ -175,16 +169,7 @@ class DocumentLoaderLibrary:
     while exposing our own stable Document interface.
     """
 
-    SUPPORTED_EXTENSIONS = {
-        ".txt",
-        ".pdf",
-        ".md",
-        ".csv",
-        ".json",
-        ".docx",
-        ".pptx",
-        ".xlsx",
-    }
+    SUPPORTED_EXTENSIONS = {".txt",".pdf",".md",".csv",".json",".docx",".pptx",".xlsx",}
 
     def __init__(self, source: str | Path):
         self.source = Path(source)

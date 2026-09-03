@@ -23,11 +23,7 @@ class RAGObserver:
 
         return time.perf_counter()
 
-    def on_retrieval_end(
-        self,
-        start_time: float,
-        document_count: int,
-    ) -> None:
+    def on_retrieval_end(self,start_time: float,document_count: int,) -> None:
         """
         Record retrieval completion.
         """
@@ -39,10 +35,7 @@ class RAGObserver:
             latency_ms=latency_ms,
         )
 
-    def on_documents_graded(
-        self,
-        relevant_count: int,
-    ) -> None:
+    def on_documents_graded(self,relevant_count: int,) -> None:
         """
         Record document grading.
         """
@@ -70,10 +63,7 @@ class RAGObserver:
 
         return time.perf_counter()
 
-    def on_generation_end(
-        self,
-        start_time: float,
-    ) -> None:
+    def on_generation_end(self,start_time: float,) -> None:
         """
         Record answer generation completion.
         """
@@ -82,11 +72,7 @@ class RAGObserver:
 
         self.metrics.record_generation(latency_ms=latency_ms)
 
-    def set_metadata(
-        self,
-        key: str,
-        value: Any,
-    ) -> None:
+    def set_metadata(self,key: str,value: Any,) -> None:
         """
         Add custom metadata.
         """

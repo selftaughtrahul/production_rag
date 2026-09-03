@@ -6,9 +6,7 @@ from .edge import decide_after_grading
 
 def build_rag_graph(retriever, reranker, context_builder, llm):
 
-    nodes = RAGNodes(
-        retriever=retriever, reranker=reranker, context_builder=context_builder, llm=llm
-    )
+    nodes = RAGNodes(retriever=retriever, reranker=reranker, context_builder=context_builder, llm=llm)
     graph = StateGraph(RAGState)
 
     # Nodes
