@@ -1,32 +1,33 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app.api.dependencies import get_rag_graph, get_hybrid_rag_graph
 from app.models.schemas import QueryRequest, UserInDB
 from app.observability import RAGObserver, RAGEvaluator
 from app.services.auth.dependencies import get_current_user
-from langgraph.checkpoint.sqlite import SqliteSaver
-from langchain_core.messages import HumanMessage, AIMessage
-
+from database.sqlite import get_connection
 
 router = APIRouter(prefix="/query", tags=["Query"])
 
-
-import uuid
 
 
 def generate_new_session_id() -> str:
     return f"session_{uuid.uuid4()}"
 
+
 def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None = None) -> dict:
     """Shared invocation logic for both query endpoints."""
     observer = RAGObserver()
     evaluator = RAGEvaluator()
-    
-    thread_id = generate_new_session_id() if not session_id else session_id
 
-    # Example message content
+    thread_id = session_id or generate_new_session_id()
 
-  
 
     result = rag_graph.invoke(
         {
@@ -102,32 +103,25 @@ async def list_conversations(current_user: UserInDB = Depends(get_current_user))
     Fetch all unique session IDs associated with the current user
     by querying the langgraph checkpointer database.
     """
-    from database.sqlite import get_connection
-    import json
-    
-    # Connect to the SQLite checkpointer database using the centralized helper
     conn = get_connection()
     cursor = conn.cursor()
-    
+
     try:
-        # We group by thread_id to get only the latest metadata per thread efficiently
-        cursor.execute('SELECT thread_id, metadata FROM checkpoints GROUP BY thread_id')
+        cursor.execute("SELECT thread_id, metadata FROM checkpoints GROUP BY thread_id")
         rows = cursor.fetchall()
-        
+
         session_ids = set()
         for thread_id, metadata in rows:
             try:
                 if metadata:
-                    # Parse the BLOB metadata to extract user_id
-                    meta_dict = json.loads(metadata.decode('utf-8'))
+                    meta_dict = json.loads(metadata.decode("utf-8"))
                     if meta_dict.get("user_id") == current_user.id:
                         session_ids.add(thread_id)
             except Exception:
                 continue
-                
+
         return {"success": True, "sessions": list(session_ids)}
     except sqlite3.OperationalError:
-        # If the checkpoints table hasn't been created yet, return empty
         return {"success": True, "sessions": []}
     finally:
         conn.close()

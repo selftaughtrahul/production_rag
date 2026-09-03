@@ -10,7 +10,7 @@ from sentence_transformers import CrossEncoder
 from app.core.config import Settings
 from app.services.ingestion.chunker import ChunkerService, LangChainRecursiveStrategy
 from app.services.ingestion.data_cleaning import DataCleaningLibrary
-from app.services.ingestion.documnent_loader import DocumentLoaderLibrary
+from app.services.ingestion.document_loader import DocumentLoaderLibrary
 from app.services.ingestion.embedding import EmbeddingService, HuggingFaceEmbeddingProvider
 from app.services.ingestion.pipeline import IngestionPipeline
 
