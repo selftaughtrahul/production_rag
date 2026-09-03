@@ -170,26 +170,35 @@ class ChromaVectorStore(VectorStore):
     def count_document_chunks(
         self,
         document_id: str,
+        metadata_filter: dict | None = None,
     ) -> int:
         """
         Count how many chunks belong to a document.
+
+        Args:
+            document_id:     The document UUID.
+            metadata_filter: Optional extra filters (e.g. {"user_id": "..."})
+                             used for ownership verification before delete.
         """
-
         if not document_id.strip():
-
             raise ValueError("document_id cannot be empty")
 
+        where: dict = {"document_id": document_id}
+
+        if metadata_filter:
+            # Combine document_id filter with extra filters using $and
+            conditions = [{"document_id": {"$eq": document_id}}]
+            for key, value in metadata_filter.items():
+                conditions.append({key: {"$eq": value}})
+            where = {"$and": conditions}
+
         result = self.collection.get(
-            where={"document_id": document_id},
+            where=where,
             include=[],
         )
 
-        return len(
-            result.get(
-                "ids",
-                [],
-            )
-        )
+        return len(result.get("ids", []))
+
 
     def document_exists(
         self,

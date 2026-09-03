@@ -2,11 +2,12 @@ from typing import TypedDict, Any
 
 
 class RAGState(TypedDict, total=False):
-    question: str # orginal question
-    rewritten_question: str
-    documents: list[Any]
-    context: str
-    answer: str
-    documents_relevant: bool
-    retry_count: int
-    observer: Any
+    question: str               # original question from the user
+    rewritten_question: str     # query rewritten by LLM for better retrieval
+    documents: list[Any]        # retrieved + reranked chunks
+    context: str                # formatted context string passed to LLM
+    answer: str                 # final answer from LLM
+    documents_relevant: bool    # grading result: True → generate, False → rewrite
+    retry_count: int            # number of retrieve-rewrite loops so far
+    observer: Any               # RAGObserver instance for metrics
+    user_id: str                # authenticated user ID — used for metadata filtering

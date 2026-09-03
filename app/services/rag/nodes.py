@@ -14,15 +14,23 @@ class RAGNodes:
         start_time = observer.on_retrieval_start() if observer else 0.0
 
         question = state["question"]
+        query = state.get("rewritten_question", question)
+        retry_count = state.get("retry_count", 0)
 
-        query = state.get("rewritten_question",question,)
+        # ── Per-user scoping ──────────────────────────────────────────
+        # Every chunk was stored with user_id in metadata at ingestion time.
+        # Filtering here ensures a user never sees another user's documents.
+        user_id = state.get("user_id")
+        metadata_filter = {"user_id": user_id} if user_id else None
 
-        retry_count = state.get("retry_count",0,)
+        # Retrieve candidate set scoped to this user
+        documents = self.retriever.retrieve(
+            query=query,
+            top_k=10,
+            metadata_filter=metadata_filter,
+        )
 
-        # Retrieve candidate set
-        documents = self.retriever.retrieve(query=query,top_k=10,)
-
-        print(f"Retrieved {len(documents)} documents")
+        print(f"Retrieved {len(documents)} documents for user_id={user_id}")
 
         # Rerank candidates
         documents = self.reranker.rerank(
@@ -43,6 +51,7 @@ class RAGNodes:
             "documents": documents,
             "retry_count": retry_count + 1,
         }
+
 
     def build_context(self, state: RAGState):
 

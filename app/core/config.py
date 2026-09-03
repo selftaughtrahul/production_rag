@@ -21,19 +21,38 @@ def _optional_env(name: str) -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
+    # ── ChromaDB ──────────────────────────────
     chroma_host: str | None
     chroma_port: int
     chroma_persist_directory: str
     collection_prefix: str
+
+    # ── Embedding ─────────────────────────────
     embedding_model: str
     embedding_device: str | None
+
+    # ── Chunking ──────────────────────────────
     reranker_model: str
     chunk_size: int
     chunk_overlap: int
+
+    # ── LangSmith ─────────────────────────────
     LANGSMITH_TRACING: bool
     LANGSMITH_API_KEY: str
     LANGSMITH_PROJECT: str
     LANGSMITH_ENDPOINT: str
+
+    # ── MySQL (auth) ──────────────────────────
+    mysql_host: str
+    mysql_port: int
+    mysql_user: str
+    mysql_password: str
+    mysql_database: str
+
+    # ── JWT ───────────────────────────────────
+    jwt_secret_key: str
+    jwt_algorithm: str
+    jwt_expire_minutes: int
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -61,8 +80,21 @@ class Settings:
             LANGSMITH_ENDPOINT=os.getenv(
                 "LANGSMITH_ENDPOINT", "https://api.smith.langchain.com"
             ),
+            # MySQL
+            mysql_host=os.getenv("MYSQL_HOST", "localhost"),
+            mysql_port=int(os.getenv("MYSQL_PORT", "3306")),
+            mysql_user=os.getenv("MYSQL_USER", "root"),
+            mysql_password=os.getenv("MYSQL_PASSWORD", ""),
+            mysql_database=os.getenv("MYSQL_DATABASE", "rag_db"),
+            # JWT
+            jwt_secret_key=os.getenv(
+                "JWT_SECRET_KEY", "change-this-secret-key-in-production"
+            ),
+            jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
+            jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "60")),
         )
 
     def collection_name_for(self, embedding_dimension: int) -> str:
         model_slug = re.sub(r"[^a-z0-9]+", "_", self.embedding_model.lower()).strip("_")
         return f"{self.collection_prefix}_{model_slug}_{embedding_dimension}"
+
