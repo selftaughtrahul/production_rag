@@ -4,6 +4,7 @@ import os
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from langsmith import traceable
 
 
 class ClaudeService:
@@ -67,6 +68,7 @@ class ClaudeService:
 
         return response.content[0].text.strip()
 
+    @traceable(run_type="llm", name="Claude RAG Generate")
     def generate(
         self,
         question: str,
@@ -111,6 +113,7 @@ Question:
 
         return response.content[0].text.strip()
 
+    @traceable(run_type="llm", name="Claude Rewrite Query")
     def rewrite_query(
         self,
         question: str,

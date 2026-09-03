@@ -7,6 +7,8 @@ from app.services.retriever.retriever import Retriever
 from app.services.vectorstore.chroma import ChromaVectorStore
 
 
+from langsmith import traceable
+
 class RetrieverService(Retriever):
     """
     Service responsible for retrieving relevant chunks
@@ -18,6 +20,7 @@ class RetrieverService(Retriever):
         self.embedder = embedder
         self.vector_store = vector_store
 
+    @traceable(run_type="retriever", name="Vector DB Search")
     def retrieve(self,query: str,top_k: int = 5,metadata_filter: dict[str, Any] | None = None,) -> list[Any]:
 
         if not query.strip():

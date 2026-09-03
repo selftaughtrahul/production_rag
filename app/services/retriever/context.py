@@ -3,11 +3,14 @@ from __future__ import annotations
 from app.services.vectorstore.models import EmbeddedChunk
 
 
+from langsmith import traceable
+
 class ContextBuilder:
     """
     Converts retrieved chunks into LLM-ready context.
     """
 
+    @traceable(run_type="chain", name="Build Context String")
     def build(self,chunks: list[EmbeddedChunk],) -> str:
 
         if not chunks:
