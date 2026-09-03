@@ -46,7 +46,7 @@ class FixedSizeChunkingStrategy(ChunkingStrategy):
     Simple character-based chunking strategy.
     """
 
-    def __init__(self,chunk_size: int = 1000,chunk_overlap: int = 200,):
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200,):
         if chunk_size <= 0:
             raise ValueError("chunk_size must be greater than 0")
 

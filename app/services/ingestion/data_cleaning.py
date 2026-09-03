@@ -284,7 +284,6 @@ class DataCleaningLibrary:
         if not text.strip():
             return ""
 
-      
         text = fix_text(text)
 
         text = clean(
