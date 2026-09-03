@@ -14,10 +14,12 @@ class ContextBuilder:
             return ""
 
         context_parts = []
+        print('chunks', chunks)
 
         for index, chunk in enumerate(chunks, start=1):
             source = chunk.metadata.get("filename") or chunk.metadata.get("source", "")
             source_info = f" (Source: {source})" if source else ""
             context_parts.append(f"[Document {index}{source_info}]\n{chunk.text.strip()}")
+        print('context_parts',context_parts)
 
         return "\n\n".join(context_parts)

@@ -30,7 +30,6 @@ async def query_documents(
         {
             "question": request.question,
             "retry_count": 0,
-            "observer": observer,
             "user_id": current_user.id,   # ← scoped retrieval
         },
         config={
