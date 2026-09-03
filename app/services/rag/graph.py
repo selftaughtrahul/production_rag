@@ -4,7 +4,7 @@ from .nodes import RAGNodes
 from .edge import decide_after_grading
 
 
-def build_rag_graph(retriever, reranker, context_builder, llm):
+def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None):
 
     nodes = RAGNodes(retriever=retriever, reranker=reranker, context_builder=context_builder, llm=llm)
     graph = StateGraph(RAGState)
@@ -12,11 +12,6 @@ def build_rag_graph(retriever, reranker, context_builder, llm):
     # Nodes
     graph.add_node("retrieve", nodes.retrieve)
     graph.add_node("reranker", nodes.rerank)
-
-
-
-
-
     graph.add_node("grade_documents", nodes.grade_documents)
     graph.add_node("rewrite", nodes.rewrite_query)
     graph.add_node("build_context", nodes.build_context)
@@ -38,4 +33,5 @@ def build_rag_graph(retriever, reranker, context_builder, llm):
     graph.add_edge("build_context", "generate")
     graph.add_edge("generate", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
+

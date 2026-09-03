@@ -41,6 +41,7 @@ class ClaudeService:
         prompt: str,
         system_prompt: str | None = None,
         max_tokens: int = 1024,
+        chat_history: list[dict[str, str]] | None = None,
     ) -> str:
         """
         Generic Claude text generation.
@@ -53,17 +54,20 @@ class ClaudeService:
         """
 
         self._check_client()
+        
+        messages = []
+        if chat_history:
+            messages.extend(chat_history)
+        messages.append({
+            "role": "user",
+            "content": prompt,
+        })
 
         response = self.client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
             system=system_prompt or "You are a helpful assistant.",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
+            messages=messages,
         )
 
         return response.content[0].text.strip()
@@ -73,6 +77,7 @@ class ClaudeService:
         self,
         question: str,
         context: str,
+        chat_history: list[dict[str, str]] | None = None,
     ) -> str:
         """
         Generate the final RAG answer using retrieved context.
@@ -99,16 +104,19 @@ Guidelines:
 Question:
 {question}"""
 
+        messages = []
+        if chat_history:
+            messages.extend(chat_history)
+        messages.append({
+            "role": "user",
+            "content": user_prompt,
+        })
+
         response = self.client.messages.create(
             model=self.model,
             max_tokens=1024,
             system=system_prompt,
-            messages=[
-                {
-                    "role": "user",
-                    "content": user_prompt,
-                }
-            ],
+            messages=messages,
         )
 
         return response.content[0].text.strip()
@@ -117,6 +125,7 @@ Question:
     def rewrite_query(
         self,
         question: str,
+        chat_history: list[dict[str, str]] | None = None,
     ) -> str:
         """
         Rewrite a user question to improve semantic retrieval.
@@ -138,6 +147,7 @@ Guidelines:
         rewritten_question = self.generate_text(
             prompt=prompt,
             max_tokens=256,
+            chat_history=chat_history,
         )
 
         print(

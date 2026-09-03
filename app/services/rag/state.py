@@ -1,4 +1,5 @@
-from typing import TypedDict, Any
+import operator
+from typing import TypedDict, Any, Annotated
 
 
 class RAGState(TypedDict, total=False):
@@ -11,3 +12,4 @@ class RAGState(TypedDict, total=False):
     retry_count: int            # number of retrieve-rewrite loops so far
     observer: Any               # RAGObserver instance for metrics
     user_id: str                # authenticated user ID — used for metadata filtering
+    chat_history: Annotated[list[dict[str, str]], operator.add]  # appended at each step

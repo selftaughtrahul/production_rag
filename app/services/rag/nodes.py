@@ -156,8 +156,9 @@ class RAGNodes:
         """
         observer = state.get("observer")
         question = state["question"]
+        chat_history = state.get("chat_history", [])
 
-        rewritten = self.llm.rewrite_query(question)
+        rewritten = self.llm.rewrite_query(question, chat_history=chat_history)
 
         logger.info("Query rewritten:\n  Before: %s\n  After:  %s", question, rewritten)
 
@@ -198,16 +199,23 @@ class RAGNodes:
 
         question = state["question"]
         context = state.get("context", "")
+        chat_history = state.get("chat_history", [])
 
         if not context:
             logger.warning("No context available — returning fallback answer.")
             if observer:
                 observer.on_generation_end()
-            return {"answer": "I could not find relevant information in the provided documents."}
-
-        answer = self.llm.generate(question=question, context=context)
+            answer = "I could not find relevant information in the provided documents."
+        else:
+            answer = self.llm.generate(question=question, context=context, chat_history=chat_history)
 
         if observer:
             observer.on_generation_end()
 
-        return {"answer": answer}
+        return {
+            "answer": answer,
+            "chat_history": [
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": answer},
+            ]
+        }

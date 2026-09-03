@@ -24,6 +24,13 @@ from app.pipeline.pipeline import IngestionPipeline
 from app.services.retriever.context import ContextBuilder
 from app.services.retriever.service import RetrieverService
 from app.services.vectorstore.chroma import ChromaVectorStore
+
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+# Initialize SQLite checkpointer for conversational memory
+_db_conn = sqlite3.connect("rag_database.db", check_same_thread=False)
+checkpointer = SqliteSaver(_db_conn)
 from app.services.rag.graph import build_rag_graph
 from app.services.retriever.hybrid_retriever import HybridRetriever
 from app.services.retriever.service import DenseRetriever
@@ -121,6 +128,7 @@ def get_rag_graph():
         reranker=reranker,
         context_builder=context_builder,
         llm=llm,
+        checkpointer=checkpointer,
     )
 
 
@@ -163,4 +171,5 @@ def get_hybrid_rag_graph():
         reranker=reranker,
         context_builder=context_builder,
         llm=llm,
+        checkpointer=checkpointer,
     )
