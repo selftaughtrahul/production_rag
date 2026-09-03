@@ -58,3 +58,16 @@ class UserInDB(BaseModel):
 
 class QueryRequest(BaseModel):
     question: str
+
+
+# ─────────────────────────────────────────────────────────────
+# Document schema
+# ─────────────────────────────────────────────────────────────
+
+from datetime import datetime
+
+class DocumentResponse(BaseModel):
+    id: str
+    user_id: str
+    file_name: str
+    created_at: datetime

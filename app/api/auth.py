@@ -97,16 +97,18 @@ def register(request: RegisterRequest, db=Depends(get_db)):
         username=request.username,
     )
 
+from fastapi.security import OAuth2PasswordRequestForm
+
 @router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, db=Depends(get_db)):
+def login(request: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
     """
-    Authenticate with email + password and return a JWT access token.
+    Authenticate with email (passed as username in form) + password and return a JWT access token.
     """
     conn, cursor = db
 
     cursor.execute(
-        "SELECT id, username, email, password, is_active FROM users WHERE email = %s",
-        (request.email,),
+        "SELECT id, username, email, password, is_active FROM users WHERE email = ?",
+        (request.username,),
     )
     row = cursor.fetchone()
 

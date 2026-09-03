@@ -9,11 +9,10 @@ from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from app.api.auth import router as auth_router
 from app.api.dependencies import build_components, build_ingestion_pipeline
 from app.api.query import router as query_router
-from app.models.schemas import UserInDB
+from app.models.schemas import UserInDB, DocumentResponse
 from app.services.auth.dependencies import get_current_user
 from app.tasks.tasks import ingest_document_task
-from database.mysql import init_db
-
+from database.mysql import init_db, get_db
 
 # ─────────────────────────────────────────────────────────────
 # Lifespan — runs once on startup
@@ -92,6 +91,7 @@ async def get_task_status(task_id: str):
 async def ingest_document(
     file: UploadFile = File(...),
     current_user: UserInDB = Depends(get_current_user),
+    db = Depends(get_db),
 ):
     """
     Upload a document and ingest it into the vector store.
@@ -139,6 +139,16 @@ async def ingest_document(
         user_id=current_user.id,        # ← user-scoped metadata
     )
 
+    # Save to SQLite database
+    conn, cursor = db
+    cursor.execute(
+        """
+        INSERT INTO documents (id, user_id, file_name)
+        VALUES (?, ?, ?)
+        """,
+        (document_id, current_user.id, original_filename)
+    )
+
     return {
         "success": True,
         "message": "Document ingested successfully",
@@ -149,6 +159,7 @@ async def ingest_document(
     }
 
 
+
 # ─────────────────────────────────────────────────────────────
 # DELETE /documents/{document_id}  (protected — requires JWT)
 # ─────────────────────────────────────────────────────────────
@@ -157,6 +168,7 @@ async def ingest_document(
 async def delete_document(
     document_id: str,
     current_user: UserInDB = Depends(get_current_user),
+    db = Depends(get_db),
 ):
     """
     Delete a document and all its vector chunks.
@@ -183,9 +195,41 @@ async def delete_document(
 
     vector_store.delete_document(document_id)
 
+    # Delete from SQLite database
+    conn, cursor = db
+    cursor.execute(
+        "DELETE FROM documents WHERE id = ? AND user_id = ?",
+        (document_id, current_user.id)
+    )
+
     return {
         "success": True,
         "message": "Document deleted successfully",
         "document_id": document_id,
         "deleted_chunks": chunks_count,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /documents  (protected — requires JWT)
+# ─────────────────────────────────────────────────────────────
+
+from typing import List
+
+@app.get("/documents", response_model=List[DocumentResponse])
+async def list_documents(
+    current_user: UserInDB = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    """
+    List all documents uploaded by the authenticated user.
+    """
+    conn, cursor = db
+    
+    cursor.execute(
+        "SELECT id, user_id, file_name, created_at FROM documents WHERE user_id = ?",
+        (current_user.id,)
+    )
+    rows = cursor.fetchall()
+    
+    return [dict(row) for row in rows]

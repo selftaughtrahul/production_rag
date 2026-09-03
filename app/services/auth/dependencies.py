@@ -43,7 +43,7 @@ def get_current_user(
 
     conn, cursor = db
     cursor.execute(
-        "SELECT id, username, email, is_active FROM users WHERE id = %s",
+        "SELECT id, username, email, is_active FROM users WHERE id = ?",
         (user_id,),
     )
     row = cursor.fetchone()
