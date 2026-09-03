@@ -1,14 +1,8 @@
-"""
-RAG graph node implementations.
-
-Each method accepts the current RAGState and returns a dict of
-updated state fields. LangGraph merges the returned dict back
-into the shared state automatically.
-"""
-
 from __future__ import annotations
 
 import logging
+
+from langchain_core.messages import HumanMessage, AIMessage
 
 from app.core.config import Settings
 from .state import RAGState
@@ -156,9 +150,13 @@ class RAGNodes:
         """
         observer = state.get("observer")
         question = state["question"]
-        chat_history = state.get("chat_history", [])
+        # Convert LangChain messages → plain dicts for Claude API
+        history_dicts = [
+            {"role": "user" if isinstance(m, HumanMessage) else "assistant", "content": m.content}
+            for m in state.get("chat_history", [])
+        ]
 
-        rewritten = self.llm.rewrite_query(question, chat_history=chat_history)
+        rewritten = self.llm.rewrite_query(question, chat_history=history_dicts)
 
         logger.info("Query rewritten:\n  Before: %s\n  After:  %s", question, rewritten)
 
@@ -199,20 +197,23 @@ class RAGNodes:
 
         question = state["question"]
         context = state.get("context", "")
-        chat_history = state.get("chat_history", [])
+
+        # Convert LangChain messages → plain dicts for Claude API
+        history_dicts = [
+            {"role": "user" if isinstance(m, HumanMessage) else "assistant", "content": m.content}
+            for m in state.get("chat_history", [])
+        ]
 
         if not context:
-            logger.info("No context available — passing empty context to LLM so it can answer from chat history.")
+            logger.info("No context available — LLM will answer from chat history if possible.")
 
-        answer = self.llm.generate(question=question, context=context, chat_history=chat_history)
+        answer = self.llm.generate(question=question, context=context, chat_history=history_dicts)
 
         if observer:
             observer.on_generation_end()
 
         return {
             "answer": answer,
-            "chat_history": [
-                {"role": "user", "content": question},
-                {"role": "assistant", "content": answer},
-            ]
+            # Return proper LangChain message objects — required by the add_messages reducer
+            "chat_history": [HumanMessage(content=question), AIMessage(content=answer)],
         }

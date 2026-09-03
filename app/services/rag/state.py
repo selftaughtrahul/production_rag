@@ -1,5 +1,5 @@
-import operator
 from typing import TypedDict, Any, Annotated
+from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 
@@ -14,6 +14,5 @@ class RAGState(TypedDict, total=False):
     retry_count: int            # number of retrieve-rewrite loops so far
     observer: Any               # RAGObserver instance for metrics
     user_id: str                # authenticated user ID — used for metadata filtering
-    # chat_history: Annotated[list[dict[str, str]], operator.add]  # appended at each step
-    chat_history: Annotated[list, add_messages]
+    chat_history: Annotated[list[BaseMessage], add_messages]  # HumanMessage / AIMessage objects
 

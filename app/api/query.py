@@ -141,54 +141,24 @@ async def get_conversation_history(
     current_user: UserInDB = Depends(get_current_user),
 ):
     """
-    Fetch complete chat history for a specific LangGraph thread/session.
+    Fetch the full chat history for a specific session from the SQLite checkpointer.
     """
-
-    config = {
-        "configurable": {
-            "thread_id": session_id,
-        }
-    }
+    config = {"configurable": {"thread_id": session_id}}
 
     with SqliteSaver.from_conn_string("rag_database.db") as checkpointer:
-
-        # Get latest checkpoint
         checkpoint = checkpointer.get(config)
 
         if not checkpoint:
-            raise HTTPException(
-                status_code=404,
-                detail="Conversation not found",
-            )
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
-        state = checkpoint.get("channel_values", {})
+        # chat_history holds LangChain HumanMessage / AIMessage objects
+        messages = checkpoint.get("channel_values", {}).get("chat_history", [])
 
-        messages = state.get("messages", [])
-
-        chat_history = []
-
-        for message in messages:
-
-            # LangChain message
-            if hasattr(message, "type"):
-                role = message.type
-            else:
-                role = "unknown"
-
-            if hasattr(message, "content"):
-                content = message.content
-            else:
-                content = str(message)
-
-            chat_history.append(
-                {
-                    "role": role,
-                    "content": content,
-                }
-            )
-
-    return {
-        "success": True,
-        "session_id": session_id,
-        "messages": chat_history,
-    }
+        return {
+            "success": True,
+            "session_id": session_id,
+            "messages": [
+                {"role": m.type, "content": m.content}
+                for m in messages
+            ],
+        }
