@@ -15,4 +15,5 @@ class RAGState(TypedDict, total=False):
     observer: Any               # RAGObserver instance for metrics
     user_id: str                # authenticated user ID — used for metadata filtering
     chat_history: Annotated[list[BaseMessage], add_messages]  # HumanMessage / AIMessage objects
+    long_term_memories: list[Any] # retrieved facts about the user
 
