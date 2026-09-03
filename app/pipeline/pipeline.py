@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services.vectorstore.chroma import ChromaVectorStore
+from app.services.retriever.bm25_store import BM25Store
 
 
 class IngestionPipeline:
@@ -14,7 +15,8 @@ class IngestionPipeline:
         2. Clean text
         3. Chunk text
         4. Embed chunks
-        5. Upsert to vector store with user_id in metadata
+        5. Upsert to ChromaDB vector store  (always)
+        6. Upsert to BM25 SQLite FTS index  (if bm25_store provided)
     """
 
     def __init__(
@@ -24,12 +26,14 @@ class IngestionPipeline:
         chunker,
         embedder,
         vector_store: ChromaVectorStore,
+        bm25_store: BM25Store | None = None,   # optional — hybrid mode
     ) -> None:
         self.loader = loader
         self.cleaner = cleaner
         self.chunker = chunker
         self.embedder = embedder
         self.vector_store = vector_store
+        self.bm25_store = bm25_store
 
     def ingest(
         self,
@@ -74,6 +78,10 @@ class IngestionPipeline:
 
         embedded_chunks = self.embedder.embed_chunks(chunks)
         self.vector_store.add(embedded_chunks)
+
+        # Also index in BM25 for hybrid retrieval (if configured)
+        if self.bm25_store is not None:
+            self.bm25_store.upsert(embedded_chunks)
 
         return {
             "document_id": document_id,

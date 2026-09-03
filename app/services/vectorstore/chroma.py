@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from typing import Any
@@ -12,6 +13,19 @@ from .base import (
 
 
 class ChromaVectorStore(VectorStore):
+    """
+    ChromaDB-backed vector store.
+
+    Responsibilities:
+        - Store embeddings
+        - Store chunk text
+        - Store metadata
+        - Dense vector similarity search
+        - Delete chunks/documents
+        - Document management
+
+    BM25 / hybrid retrieval should NOT be implemented here.
+    """
 
     def __init__(
         self,
@@ -24,27 +38,45 @@ class ChromaVectorStore(VectorStore):
     ) -> None:
 
         if embedding_dimension <= 0:
-            raise ValueError("embedding_dimension must be greater than 0")
+            raise ValueError(
+                "embedding_dimension must be greater than 0"
+            )
 
         self.embedding_dimension = embedding_dimension
 
+        # =====================================================
+        # CHROMA CLIENT
+        # =====================================================
+
         if host:
+
             self.client = chromadb.HttpClient(
                 host=host,
                 port=port or 8000,
             )
 
         else:
+
             self.client = chromadb.PersistentClient(
                 path=persist_directory or "data/chroma_db"
             )
 
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={
-                "hnsw:space": "cosine",
-            },
+        # =====================================================
+        # COLLECTION
+        # =====================================================
+
+        self.collection = (
+            self.client.get_or_create_collection(
+                name=collection_name,
+                metadata={
+                    "hnsw:space": "cosine",
+                },
+            )
         )
+
+    # =========================================================
+    # ADD / UPSERT
+    # =========================================================
 
     def add(
         self,
@@ -57,11 +89,29 @@ class ChromaVectorStore(VectorStore):
         self._validate_chunks(chunks)
 
         self.collection.upsert(
-            ids=[chunk.chunk_id for chunk in chunks],
-            documents=[chunk.text for chunk in chunks],
-            embeddings=[chunk.embedding for chunk in chunks],
-            metadatas=[self._sanitize_metadata(chunk.metadata) for chunk in chunks],
+            ids=[
+                chunk.chunk_id
+                for chunk in chunks
+            ],
+            documents=[
+                chunk.text
+                for chunk in chunks
+            ],
+            embeddings=[
+                chunk.embedding
+                for chunk in chunks
+            ],
+            metadatas=[
+                self._sanitize_metadata(
+                    chunk.metadata
+                )
+                for chunk in chunks
+            ],
         )
+
+    # =========================================================
+    # DENSE VECTOR SEARCH
+    # =========================================================
 
     def search(
         self,
@@ -71,40 +121,97 @@ class ChromaVectorStore(VectorStore):
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[SearchResult]:
 
-        self._validate_embedding(query_embedding)
+        self._validate_embedding(
+            query_embedding
+        )
 
         if top_k <= 0:
-            raise ValueError("top_k must be greater than 0")
+            raise ValueError(
+                "top_k must be greater than 0"
+            )
 
         query_kwargs: dict[str, Any] = {
-            "query_embeddings": [query_embedding],
+            "query_embeddings": [
+                query_embedding
+            ],
             "n_results": top_k,
         }
 
+        # =====================================================
+        # METADATA FILTER
+        # =====================================================
+
         if metadata_filter:
-            query_kwargs["where"] = self._build_filter(metadata_filter)
 
-        results = self.collection.query(**query_kwargs)
-
-        ids = results.get("ids", [])[0]
-        distances = results.get("distances", [])[0]
-        documents = results.get("documents", [])[0]
-        metadatas = results.get("metadatas", [])[0]
-
-        return [
-            SearchResult(
-                chunk_id=chunk_id,
-                text=document,
-                score=1.0 / (1.0 + distance),
-                metadata=metadata or {},
+            query_kwargs["where"] = (
+                self._build_filter(
+                    metadata_filter
+                )
             )
-            for chunk_id, document, distance, metadata in zip(
-                ids,
-                documents,
-                distances,
-                metadatas,
+
+        # =====================================================
+        # CHROMA QUERY
+        # =====================================================
+
+        results = self.collection.query(
+            **query_kwargs
+        )
+
+        ids = (
+            results.get("ids", [[]])[0]
+        )
+
+        distances = (
+            results.get(
+                "distances",
+                [[]],
+            )[0]
+        )
+
+        documents = (
+            results.get(
+                "documents",
+                [[]],
+            )[0]
+        )
+
+        metadatas = (
+            results.get(
+                "metadatas",
+                [[]],
+            )[0]
+        )
+
+        # =====================================================
+        # SEARCH RESULTS
+        # =====================================================
+
+        search_results: list[SearchResult] = []
+
+        for (
+            chunk_id,
+            document,
+            distance,
+            metadata,
+        ) in zip(
+            ids,
+            documents,
+            distances,
+            metadatas,
+        ):
+
+            search_results.append(
+                SearchResult(
+                    chunk_id=chunk_id,
+                    text=document,
+                    score=1.0 / (
+                        1.0 + distance
+                    ),
+                    metadata=metadata or {},
+                )
             )
-        ]
+
+        return search_results
 
     # =========================================================
     # DELETE CHUNKS
@@ -118,38 +225,32 @@ class ChromaVectorStore(VectorStore):
         if not chunk_ids:
             return
 
-        self.collection.delete(ids=chunk_ids)
+        self.collection.delete(
+            ids=chunk_ids
+        )
+
+    # =========================================================
+    # DELETE DOCUMENT
+    # =========================================================
 
     def delete_document(
         self,
         document_id: str,
     ) -> int:
         """
-        Delete all chunks/vectors belonging to a document.
-
-        Example:
-
-            document_id = "abc123"
-
-        This removes:
-
-            abc123_chunk_0
-            abc123_chunk_1
-            abc123_chunk_2
-            ...
-
-        based on the document_id stored in metadata.
-
-        Returns:
-            Number of chunks that existed before deletion.
+        Delete all chunks belonging to a document.
         """
 
         if not document_id.strip():
 
-            raise ValueError("document_id cannot be empty")
+            raise ValueError(
+                "document_id cannot be empty"
+            )
 
         existing = self.collection.get(
-            where={"document_id": document_id},
+            where={
+                "document_id": document_id
+            },
             include=[
                 "metadatas",
             ],
@@ -163,9 +264,17 @@ class ChromaVectorStore(VectorStore):
         if not chunk_ids:
             return 0
 
-        self.collection.delete(where={"document_id": document_id})
+        self.collection.delete(
+            where={
+                "document_id": document_id
+            }
+        )
 
         return len(chunk_ids)
+
+    # =========================================================
+    # COUNT DOCUMENT CHUNKS
+    # =========================================================
 
     def count_document_chunks(
         self,
@@ -173,48 +282,83 @@ class ChromaVectorStore(VectorStore):
         metadata_filter: dict | None = None,
     ) -> int:
         """
-        Count how many chunks belong to a document.
+        Count chunks belonging to a document.
 
-        Args:
-            document_id:     The document UUID.
-            metadata_filter: Optional extra filters (e.g. {"user_id": "..."})
-                             used for ownership verification before delete.
+        Optional metadata_filter can be used for
+        ownership verification.
         """
-        if not document_id.strip():
-            raise ValueError("document_id cannot be empty")
 
-        where: dict = {"document_id": document_id}
+        if not document_id.strip():
+
+            raise ValueError(
+                "document_id cannot be empty"
+            )
+
+        where: dict = {
+            "document_id": document_id
+        }
 
         if metadata_filter:
-            # Combine document_id filter with extra filters using $and
-            conditions = [{"document_id": {"$eq": document_id}}]
-            for key, value in metadata_filter.items():
-                conditions.append({key: {"$eq": value}})
-            where = {"$and": conditions}
+
+            conditions = [
+                {
+                    "document_id": {
+                        "$eq": document_id
+                    }
+                }
+            ]
+
+            for key, value in (
+                metadata_filter.items()
+            ):
+
+                conditions.append(
+                    {
+                        key: {
+                            "$eq": value
+                        }
+                    }
+                )
+
+            where = {
+                "$and": conditions
+            }
 
         result = self.collection.get(
             where=where,
             include=[],
         )
 
-        return len(result.get("ids", []))
+        return len(
+            result.get(
+                "ids",
+                [],
+            )
+        )
 
+    # =========================================================
+    # DOCUMENT EXISTS
+    # =========================================================
 
     def document_exists(
         self,
         document_id: str,
     ) -> bool:
         """
-        Check whether at least one vector/chunk
+        Check whether at least one chunk
         exists for a document.
         """
 
         if not document_id.strip():
 
-            raise ValueError("document_id cannot be empty")
+            raise ValueError(
+                "document_id cannot be empty"
+            )
 
         result = self.collection.get(
-            where={"document_id": document_id},
+            where={
+                "document_id": document_id
+            },
             include=[],
         )
 
@@ -225,22 +369,28 @@ class ChromaVectorStore(VectorStore):
             )
         )
 
+    # =========================================================
+    # GET DOCUMENT CHUNKS
+    # =========================================================
+
     def get_document_chunks(
         self,
         document_id: str,
     ) -> list[dict[str, Any]]:
         """
         Return all chunks belonging to a document.
-
-        Useful for debugging and document management.
         """
 
         if not document_id.strip():
 
-            raise ValueError("document_id cannot be empty")
+            raise ValueError(
+                "document_id cannot be empty"
+            )
 
         result = self.collection.get(
-            where={"document_id": document_id},
+            where={
+                "document_id": document_id
+            },
             include=[
                 "documents",
                 "metadatas",
@@ -268,16 +418,28 @@ class ChromaVectorStore(VectorStore):
                 "text": text,
                 "metadata": metadata or {},
             }
-            for chunk_id, text, metadata in zip(
+            for (
+                chunk_id,
+                text,
+                metadata,
+            ) in zip(
                 ids,
                 documents,
                 metadatas,
             )
         ]
 
+    # =========================================================
+    # COUNT
+    # =========================================================
+
     def count(self) -> int:
 
         return self.collection.count()
+
+    # =========================================================
+    # HEALTH CHECK
+    # =========================================================
 
     def health_check(self) -> bool:
 
@@ -290,6 +452,10 @@ class ChromaVectorStore(VectorStore):
         except Exception:
 
             return False
+
+    # =========================================================
+    # METADATA SANITIZATION
+    # =========================================================
 
     @staticmethod
     def _sanitize_metadata(
@@ -321,12 +487,25 @@ class ChromaVectorStore(VectorStore):
 
         return sanitized
 
+    # =========================================================
+    # BUILD CHROMA FILTER
+    # =========================================================
+
     @staticmethod
     def _build_filter(
         metadata_filter: dict[str, Any],
     ) -> dict[str, Any]:
 
-        return {key: {"$eq": value} for key, value in metadata_filter.items()}
+        return {
+            key: {
+                "$eq": value
+            }
+            for key, value in metadata_filter.items()
+        }
+
+    # =========================================================
+    # VALIDATE CHUNKS
+    # =========================================================
 
     def _validate_chunks(
         self,
@@ -335,7 +514,13 @@ class ChromaVectorStore(VectorStore):
 
         for chunk in chunks:
 
-            self._validate_embedding(chunk.embedding)
+            self._validate_embedding(
+                chunk.embedding
+            )
+
+    # =========================================================
+    # VALIDATE EMBEDDING
+    # =========================================================
 
     def _validate_embedding(
         self,
@@ -349,3 +534,4 @@ class ChromaVectorStore(VectorStore):
                 f"expected {self.embedding_dimension}, "
                 f"got {len(embedding)}"
             )
+

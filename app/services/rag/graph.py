@@ -11,7 +11,7 @@ def build_rag_graph(retriever, reranker, context_builder, llm):
 
     # Nodes
     graph.add_node("retrieve", nodes.retrieve)
-    graph.add_node("reranker", nodes.reranke)
+    graph.add_node("reranker", nodes.rerank)
 
 
 

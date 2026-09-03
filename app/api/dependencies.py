@@ -25,6 +25,10 @@ from app.services.retriever.context import ContextBuilder
 from app.services.retriever.service import RetrieverService
 from app.services.vectorstore.chroma import ChromaVectorStore
 from app.services.rag.graph import build_rag_graph
+from app.services.retriever.hybrid_retriever import HybridRetriever
+from app.services.retriever.service import DenseRetriever
+from app.services.retriever.bm_retrivar import BM25Retriever
+from app.services.retriever.bm25_store import BM25Store
 
 
 @dataclass(slots=True)
@@ -73,6 +77,7 @@ def build_components() -> RAGComponents:
 def build_ingestion_pipeline(source: str,) -> IngestionPipeline:
     settings = Settings.from_environment()
     components = build_components()
+    bm25_store = BM25Store(db_path="data/bm25.db")
     return IngestionPipeline(
         loader=DocumentLoaderLibrary(source=source),
         cleaner=DataCleaningLibrary(),
@@ -84,12 +89,16 @@ def build_ingestion_pipeline(source: str,) -> IngestionPipeline:
         ),
         embedder=components.embedder,
         vector_store=components.vector_store,
+        bm25_store=bm25_store,
     )
+
+
+
 
 
 @lru_cache(maxsize=1)
 def get_rag_graph():
-
+    """Single dense-vector retrieval graph (original)."""
     components = build_components()
 
     retriever = RetrieverService(
@@ -105,6 +114,48 @@ def get_rag_graph():
     )
     reranker = CrossEncoderReranker(model=reranker_model)
 
+    llm = ClaudeService()
+
+    return build_rag_graph(
+        retriever=retriever,
+        reranker=reranker,
+        context_builder=context_builder,
+        llm=llm,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_hybrid_rag_graph():
+    """
+    Hybrid retrieval graph: Dense + BM25 → RRF Fusion → Reranker → LLM.
+
+    Use this via Depends(get_hybrid_rag_graph) on any endpoint.
+    """
+    components = build_components()
+    settings = Settings.from_environment()
+
+    # Dense retriever (same embedder + Chroma as the single retriever)
+    dense_retriever = DenseRetriever(
+        embedder=components.embedder,
+        vector_store=components.vector_store,
+    )
+
+    # BM25 retriever (SQLite FTS5 — persisted at data/bm25.db)
+    bm25_store = BM25Store(db_path="data/bm25.db")
+    bm25_retriever = BM25Retriever(bm25_store=bm25_store)
+
+    # Hybrid = Dense + BM25 fused with RRF
+    retriever = HybridRetriever(
+        dense_retriever=dense_retriever,
+        bm25_retriever=bm25_retriever,
+    )
+
+    context_builder = ContextBuilder()
+    reranker_model = get_cross_encoder_model(
+        model=settings.reranker_model,
+        device=settings.embedding_device,
+    )
+    reranker = CrossEncoderReranker(model=reranker_model)
     llm = ClaudeService()
 
     return build_rag_graph(

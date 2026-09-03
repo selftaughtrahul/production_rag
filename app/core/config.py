@@ -54,6 +54,12 @@ class Settings:
     jwt_algorithm: str
     jwt_expire_minutes: int
 
+    # ── Retrieval Top-K ───────────────────────
+    dense_top_k: int
+    bm25_top_k: int
+    fusion_top_k: int
+    rerank_top_k: int
+
     @classmethod
     def from_environment(cls) -> "Settings":
         return cls(
@@ -92,6 +98,11 @@ class Settings:
             ),
             jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
             jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "60")),
+            # Top-K retrieval settings
+            dense_top_k=int(os.getenv("DENSE_TOP_K", "20")),
+            bm25_top_k=int(os.getenv("BM25_TOP_K", "20")),
+            fusion_top_k=int(os.getenv("FUSION_TOP_K", "20")),
+            rerank_top_k=int(os.getenv("RERANK_TOP_K", "5")),
         )
 
     def collection_name_for(self, embedding_dimension: int) -> str:

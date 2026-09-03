@@ -1,132 +1,140 @@
+"""
+RAG graph node implementations.
+
+Each method accepts the current RAGState and returns a dict of
+updated state fields. LangGraph merges the returned dict back
+into the shared state automatically.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from app.core.config import Settings
 from .state import RAGState
+
+logger = logging.getLogger(__name__)
 
 
 class RAGNodes:
+    """
+    Collection of all node functions used inside the RAG StateGraph.
 
-    def __init__(self,retriever,reranker,context_builder,llm,):
+    Nodes (in execution order):
+        retrieve        → fetch candidate chunks from the vector store
+        rerank          → cross-encoder re-scoring of retrieved chunks
+        grade_documents → decide if chunks are relevant enough
+        rewrite_query   → LLM rewrites the question for a better search
+        build_context   → format chunks into a single context string
+        generate        → LLM produces the final answer
+    """
+
+    def __init__(self, retriever, reranker, context_builder, llm) -> None:
         self.retriever = retriever
         self.reranker = reranker
         self.context_builder = context_builder
         self.llm = llm
 
-    def reranke(self, state: RAGState):
-        question = state["question"]
-        query = state.get("rewritten_question", question)
-        documents = state.get("documents", [])
-        
-        if not documents:
-            return {"documents": []}
-            
-        documents = self.reranker.rerank(
-            query=query,
-            documents=documents,
-            top_k=5,
-        )
-        
-        print(f"Reranked to {len(documents)} documents")
-        return {"documents": documents}
+    # ──────────────────────────────────────────────────────────────────
+    # Node 1 — Retrieve
+    # ──────────────────────────────────────────────────────────────────
 
+    def retrieve(self, state: RAGState) -> dict:
+        """
+        Fetch the top-N candidate chunks from the vector store.
 
-    def retrieve(self, state: RAGState):
+        Scoped to the authenticated user via metadata_filter so that
+        users never see each other's documents.
+        """
         observer = state.get("observer")
-        start_time = observer.on_retrieval_start() if observer else 0.0
+        if observer:
+            observer.on_retrieval_start()
 
         question = state["question"]
-        query = state.get("rewritten_question", question)
+        query = state.get("rewritten_question") or question
         retry_count = state.get("retry_count", 0)
 
-        # ── Per-user scoping ──────────────────────────────────────────
-        # Every chunk was stored with user_id in metadata at ingestion time.
-        # Filtering here ensures a user never sees another user's documents.
         user_id = state.get("user_id")
         metadata_filter = {"user_id": user_id} if user_id else None
 
-        # Retrieve candidate set scoped to this user
         documents = self.retriever.retrieve(
             query=query,
-            top_k=10,
+            top_k=20,
             metadata_filter=metadata_filter,
         )
 
-        print(f"Retrieved {len(documents)} documents for user_id={user_id}")
-
-       
-
+        logger.info("Retrieved %d chunks (user=%s, attempt=%d)", len(documents), user_id, retry_count + 1)
 
         if observer:
-            observer.on_retrieval_end(
-                start_time=start_time,
-                document_count=len(documents),
-            )
+            observer.on_retrieval_end(document_count=len(documents))
 
         return {
             "documents": documents,
             "retry_count": retry_count + 1,
         }
 
+    # ──────────────────────────────────────────────────────────────────
+    # Node 2 — Rerank
+    # ──────────────────────────────────────────────────────────────────
 
-    def build_context(self, state: RAGState):
+    def rerank(self, state: RAGState) -> dict:
+        """
+        Re-score retrieved chunks using a cross-encoder model.
 
-        documents = state.get(
-            "documents",
-            [],
-        )
+        Returns the top-K most relevant chunks for grading.
+        """
+        question = state["question"]
+        query = state.get("rewritten_question") or question
+        documents = state.get("documents", [])
 
         if not documents:
-            return {"context": ""}
+            logger.warning("Reranker received 0 documents — skipping.")
+            return {"documents": []}
 
-        context = self.context_builder.build(documents)
+        settings = Settings.from_environment()
 
-        return {"context": context}
-
-    def generate(self, state: RAGState):
-        observer = state.get("observer")
-        start_time = observer.on_generation_start() if observer else 0.0
-
-        question = state["question"]
-        context = state.get("context", "")
-
-        if not context:
-            if observer:
-                observer.on_generation_end(start_time)
-
-            return {
-                "answer": ("I could not find relevant information in the documents.")
-            }
-
-        answer = self.llm.generate(
-            question=question,
-            context=context,
+        reranked = self.reranker.rerank(
+            query=query,
+            documents=documents,
+            top_k=settings.rerank_top_k,
         )
 
-        if observer:
-            observer.on_generation_end(start_time)
+        logger.info("Reranked: %d → %d documents", len(documents), len(reranked))
+        return {"documents": reranked}
 
-        return {"answer": answer}
+    # ──────────────────────────────────────────────────────────────────
+    # Node 3 — Grade Documents
+    # ──────────────────────────────────────────────────────────────────
 
-    def grade_documents(self,state: RAGState,):
+    def grade_documents(self, state: RAGState) -> dict:
+        """
+        Decide whether the retrieved chunks are relevant enough to answer.
+
+        Uses the rerank_score set by the cross-encoder.
+        Any document with a score >= -1.0 is considered relevant
+        (cross-encoder scores are negative; higher is better).
+        """
         observer = state.get("observer")
         documents = state.get("documents", [])
 
         if not documents:
+            logger.warning("No documents to grade — marking as not relevant.")
             if observer:
                 observer.on_documents_graded(0)
-
             return {"documents_relevant": False}
 
-        # Keep documents with positive rerank relevance, or fallback to top-3 if below threshold
-        relevant_documents = [
-            doc
-            for doc in documents
-            if doc.metadata.get(
-                "rerank_score",
-                0.0,
-            )
-            >= -1.0
+        relevant = [
+            doc for doc in documents
+            if doc.metadata.get("rerank_score", 0.0) >= -1.0
         ]
 
-        is_relevant = len(relevant_documents) > 0
-        final_docs = relevant_documents if is_relevant else documents[:3]
+        is_relevant = len(relevant) > 0
+        final_docs = relevant if is_relevant else documents[:3]
+
+        logger.info(
+            "Grading: %d docs → %d relevant (relevant=%s)",
+            len(documents), len(final_docs), is_relevant,
+        )
 
         if observer:
             observer.on_documents_graded(len(final_docs))
@@ -136,16 +144,70 @@ class RAGNodes:
             "documents_relevant": is_relevant,
         }
 
-    def rewrite_query(self,state: RAGState,):
+    # ──────────────────────────────────────────────────────────────────
+    # Node 4 — Rewrite Query
+    # ──────────────────────────────────────────────────────────────────
+
+    def rewrite_query(self, state: RAGState) -> dict:
+        """
+        Ask the LLM to rewrite the question for better semantic retrieval.
+
+        Called when grade_documents decides the current results are not relevant.
+        """
         observer = state.get("observer")
         question = state["question"]
+
+        rewritten = self.llm.rewrite_query(question)
+
+        logger.info("Query rewritten:\n  Before: %s\n  After:  %s", question, rewritten)
 
         if observer:
             observer.on_query_rewritten()
             observer.on_retry()
 
-        rewritten_question = self.llm.rewrite_query(question)
+        return {"rewritten_question": rewritten}
 
-        return {
-            "rewritten_question": rewritten_question,
-        }
+    # ──────────────────────────────────────────────────────────────────
+    # Node 5 — Build Context
+    # ──────────────────────────────────────────────────────────────────
+
+    def build_context(self, state: RAGState) -> dict:
+        """
+        Format the final set of documents into a single context string
+        that the LLM can read.
+        """
+        documents = state.get("documents", [])
+
+        if not documents:
+            return {"context": ""}
+
+        context = self.context_builder.build(documents)
+        return {"context": context}
+
+    # ──────────────────────────────────────────────────────────────────
+    # Node 6 — Generate
+    # ──────────────────────────────────────────────────────────────────
+
+    def generate(self, state: RAGState) -> dict:
+        """
+        Generate the final answer using the LLM and the built context.
+        """
+        observer = state.get("observer")
+        if observer:
+            observer.on_generation_start()
+
+        question = state["question"]
+        context = state.get("context", "")
+
+        if not context:
+            logger.warning("No context available — returning fallback answer.")
+            if observer:
+                observer.on_generation_end()
+            return {"answer": "I could not find relevant information in the provided documents."}
+
+        answer = self.llm.generate(question=question, context=context)
+
+        if observer:
+            observer.on_generation_end()
+
+        return {"answer": answer}
