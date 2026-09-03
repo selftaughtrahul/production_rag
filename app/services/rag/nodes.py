@@ -9,6 +9,24 @@ class RAGNodes:
         self.context_builder = context_builder
         self.llm = llm
 
+    def reranke(self, state: RAGState):
+        question = state["question"]
+        query = state.get("rewritten_question", question)
+        documents = state.get("documents", [])
+        
+        if not documents:
+            return {"documents": []}
+            
+        documents = self.reranker.rerank(
+            query=query,
+            documents=documents,
+            top_k=5,
+        )
+        
+        print(f"Reranked to {len(documents)} documents")
+        return {"documents": documents}
+
+
     def retrieve(self, state: RAGState):
         observer = state.get("observer")
         start_time = observer.on_retrieval_start() if observer else 0.0
@@ -32,14 +50,8 @@ class RAGNodes:
 
         print(f"Retrieved {len(documents)} documents for user_id={user_id}")
 
-        # Rerank candidates
-        documents = self.reranker.rerank(
-            query=query,
-            documents=documents,
-            top_k=5,
-        )
+       
 
-        print(f"Reranked to {len(documents)} documents")
 
         if observer:
             observer.on_retrieval_end(

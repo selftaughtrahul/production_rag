@@ -11,13 +11,20 @@ def build_rag_graph(retriever, reranker, context_builder, llm):
 
     # Nodes
     graph.add_node("retrieve", nodes.retrieve)
+    graph.add_node("reranker", nodes.reranke)
+
+
+
+
+
     graph.add_node("grade_documents", nodes.grade_documents)
     graph.add_node("rewrite", nodes.rewrite_query)
     graph.add_node("build_context", nodes.build_context)
     graph.add_node("generate", nodes.generate)
 
     graph.add_edge(START, "retrieve")
-    graph.add_edge("retrieve", "grade_documents")
+    graph.add_edge("retrieve", "reranker")
+    graph.add_edge("reranker", "grade_documents")
     graph.add_conditional_edges(
         "grade_documents",
         decide_after_grading,

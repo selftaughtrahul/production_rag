@@ -22,6 +22,7 @@ class Reranker(ABC):
         pass
 
 
+
 @dataclass
 class CrossEncoderReranker(Reranker):
     """Rerank documents using a cross-encoder model."""
