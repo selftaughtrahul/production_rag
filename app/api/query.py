@@ -139,20 +139,25 @@ async def get_conversation_history(
     """
     config = {"configurable": {"thread_id": session_id}}
 
-    with SqliteSaver.from_conn_string("rag_database.db") as checkpointer:
-        checkpoint = checkpointer.get(config)
+    with SqliteSaver.from_conn_string("rag_database.db") as cp:
+        checkpoint = cp.get(config)
 
         if not checkpoint:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # chat_history holds LangChain HumanMessage / AIMessage objects
-        messages = checkpoint.get("channel_values", {}).get("chat_history", [])
+        raw_messages = checkpoint.get("channel_values", {}).get("chat_history", [])
+
+        messages = []
+        for m in raw_messages:
+            # LangGraph may deserialize messages as plain dicts or as message objects
+            if isinstance(m, dict):
+                messages.append({"role": m.get("type", m.get("role", "unknown")), "content": m.get("content", "")})
+            else:
+                messages.append({"role": m.type, "content": m.content})
 
         return {
             "success": True,
             "session_id": session_id,
-            "messages": [
-                {"role": m.type, "content": m.content}
-                for m in messages
-            ],
+            "messages": messages,
         }
+
