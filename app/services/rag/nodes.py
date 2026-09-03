@@ -202,12 +202,9 @@ class RAGNodes:
         chat_history = state.get("chat_history", [])
 
         if not context:
-            logger.warning("No context available — returning fallback answer.")
-            if observer:
-                observer.on_generation_end()
-            answer = "I could not find relevant information in the provided documents."
-        else:
-            answer = self.llm.generate(question=question, context=context, chat_history=chat_history)
+            logger.info("No context available — passing empty context to LLM so it can answer from chat history.")
+
+        answer = self.llm.generate(question=question, context=context, chat_history=chat_history)
 
         if observer:
             observer.on_generation_end()
