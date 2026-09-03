@@ -10,7 +10,7 @@ from jose import JWTError
 
 from app.models.schemas import UserInDB
 from app.services.auth.auth_service import decode_token
-from database.mysql import get_db
+from database.sqlite import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 

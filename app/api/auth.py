@@ -20,7 +20,7 @@ from app.services.auth.auth_service import (
     verify_password,
 )
 from app.services.auth.dependencies import get_current_user
-from database.mysql import get_db
+from database.sqlite import get_db
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

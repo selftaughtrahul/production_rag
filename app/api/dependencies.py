@@ -1,41 +1,36 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from functools import lru_cache
-from app.services.retriever.reranker import CrossEncoderReranker
-from app.core.config import Settings
+
+from langgraph.checkpoint.sqlite import SqliteSaver
 from sentence_transformers import CrossEncoder
-from app.services.ingestion.chunker import (
-    ChunkerService,
-    LangChainRecursiveStrategy,
-)
-from app.services.ingestion.data_cleaning import (
-    DataCleaningLibrary,
-)
-from app.services.ingestion.documnent_loader import (
-    DocumentLoaderLibrary,
-)
-from app.services.ingestion.embedding import (
-    EmbeddingService,
-    HuggingFaceEmbeddingProvider,
-)
-from app.services.llm.claude import ClaudeService
-from app.pipeline.pipeline import IngestionPipeline
+
+from app.core.config import Settings
+from app.services.ingestion.chunker import ChunkerService, LangChainRecursiveStrategy
+from app.services.ingestion.data_cleaning import DataCleaningLibrary
+from app.services.ingestion.documnent_loader import DocumentLoaderLibrary
+from app.services.ingestion.embedding import EmbeddingService, HuggingFaceEmbeddingProvider
+from app.services.ingestion.pipeline import IngestionPipeline
+
+from app.services.retriever.bm25 import BM25Retriever
+from app.services.retriever.bm25_store import BM25Store
 from app.services.retriever.context import ContextBuilder
-from app.services.retriever.service import RetrieverService
+from app.services.retriever.dense import DenseRetriever
+from app.services.retriever.hybrid import HybridRetriever
+from app.services.retriever.reranker import CrossEncoderReranker
+
+from app.services.llm.claude import ClaudeService
+from app.services.rag.graph import build_rag_graph
 from app.services.vectorstore.chroma import ChromaVectorStore
 
-import sqlite3
-from langgraph.checkpoint.sqlite import SqliteSaver
 
-# Initialize SQLite checkpointer for conversational memory
-_db_conn = sqlite3.connect("rag_database.db", check_same_thread=False)
+from database.sqlite import get_connection
+
+# Initialize SQLite checkpointer for conversational memory globally
+_db_conn = get_connection()
 checkpointer = SqliteSaver(_db_conn)
-from app.services.rag.graph import build_rag_graph
-from app.services.retriever.hybrid_retriever import HybridRetriever
-from app.services.retriever.service import DenseRetriever
-from app.services.retriever.bm_retrivar import BM25Retriever
-from app.services.retriever.bm25_store import BM25Store
 
 
 @dataclass(slots=True)
@@ -45,7 +40,7 @@ class RAGComponents:
 
 
 @lru_cache(maxsize=1)
-def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddingProvider: #noqa
+def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddingProvider:
     print("Loading embedding model...")
     return HuggingFaceEmbeddingProvider(
         model=model,
@@ -54,7 +49,7 @@ def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddi
 
 
 @lru_cache(maxsize=1)
-def get_cross_encoder_model(model: str,device: str | None = None,) -> CrossEncoder:
+def get_cross_encoder_model(model: str, device: str | None = None) -> CrossEncoder:
     print(f"Loading cross encoder model: {model}...")
     return CrossEncoder(model, device=device)
 
@@ -81,7 +76,7 @@ def build_components() -> RAGComponents:
     )
 
 
-def build_ingestion_pipeline(source: str,) -> IngestionPipeline:
+def build_ingestion_pipeline(source: str) -> IngestionPipeline:
     settings = Settings.from_environment()
     components = build_components()
     bm25_store = BM25Store(db_path="data/bm25.db")
@@ -100,27 +95,17 @@ def build_ingestion_pipeline(source: str,) -> IngestionPipeline:
     )
 
 
-
-
-
-@lru_cache(maxsize=1)
-def get_rag_graph():
-    """Single dense-vector retrieval graph (original)."""
-    components = build_components()
-
-    retriever = RetrieverService(
-        embedder=components.embedder,
-        vector_store=components.vector_store,
-    )
-
+def _build_common_rag_graph(retriever):
+    """Helper to build a RAG graph with shared components."""
     settings = Settings.from_environment()
     context_builder = ContextBuilder()
+    
     reranker_model = get_cross_encoder_model(
         model=settings.reranker_model,
         device=settings.embedding_device,
     )
     reranker = CrossEncoderReranker(model=reranker_model)
-
+    
     llm = ClaudeService()
 
     return build_rag_graph(
@@ -130,6 +115,19 @@ def get_rag_graph():
         llm=llm,
         checkpointer=checkpointer,
     )
+
+
+@lru_cache(maxsize=1)
+def get_rag_graph():
+    """Single dense-vector retrieval graph (original)."""
+    components = build_components()
+
+    retriever = DenseRetriever(
+        embedder=components.embedder,
+        vector_store=components.vector_store,
+    )
+
+    return _build_common_rag_graph(retriever)
 
 
 @lru_cache(maxsize=1)
@@ -140,15 +138,14 @@ def get_hybrid_rag_graph():
     Use this via Depends(get_hybrid_rag_graph) on any endpoint.
     """
     components = build_components()
-    settings = Settings.from_environment()
 
-    # Dense retriever (same embedder + Chroma as the single retriever)
+    # Dense retriever
     dense_retriever = DenseRetriever(
         embedder=components.embedder,
         vector_store=components.vector_store,
     )
 
-    # BM25 retriever (SQLite FTS5 — persisted at data/bm25.db)
+    # BM25 retriever
     bm25_store = BM25Store(db_path="data/bm25.db")
     bm25_retriever = BM25Retriever(bm25_store=bm25_store)
 
@@ -158,18 +155,4 @@ def get_hybrid_rag_graph():
         bm25_retriever=bm25_retriever,
     )
 
-    context_builder = ContextBuilder()
-    reranker_model = get_cross_encoder_model(
-        model=settings.reranker_model,
-        device=settings.embedding_device,
-    )
-    reranker = CrossEncoderReranker(model=reranker_model)
-    llm = ClaudeService()
-
-    return build_rag_graph(
-        retriever=retriever,
-        reranker=reranker,
-        context_builder=context_builder,
-        llm=llm,
-        checkpointer=checkpointer,
-    )
+    return _build_common_rag_graph(retriever)

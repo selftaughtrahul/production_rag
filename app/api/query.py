@@ -102,11 +102,11 @@ async def list_conversations(current_user: UserInDB = Depends(get_current_user))
     Fetch all unique session IDs associated with the current user
     by querying the langgraph checkpointer database.
     """
-    import sqlite3
+    from database.sqlite import get_connection
     import json
     
-    # Connect directly to the SQLite checkpointer database
-    conn = sqlite3.connect("rag_database.db", check_same_thread=False)
+    # Connect to the SQLite checkpointer database using the centralized helper
+    conn = get_connection()
     cursor = conn.cursor()
     
     try:

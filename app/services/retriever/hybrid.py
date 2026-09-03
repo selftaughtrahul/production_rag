@@ -6,7 +6,6 @@ Pipeline:
                       ├─→  RRF Fusion  →  top-K results
     BM25 (SQLite)   ──┘
 """
-
 from __future__ import annotations
 
 import logging
@@ -15,9 +14,9 @@ from typing import Any
 
 from langsmith import traceable
 
-from app.services.retriever.retriever import Retriever
-from app.services.retriever.service import DenseRetriever
-from app.services.retriever.bm_retrivar import BM25Retriever
+from app.services.retriever.base import Retriever
+from app.services.retriever.dense import DenseRetriever
+from app.services.retriever.bm25 import BM25Retriever
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +44,6 @@ class HybridRetriever(Retriever):
         top_k: int = 20,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[Any]:
-        """
-        Retrieve documents using both dense and sparse search, then fuse results.
-        """
         if not query.strip():
             return []
 
@@ -113,7 +109,6 @@ class HybridRetriever(Retriever):
         fused: list[Any] = []
         for cid in ranked_ids[:top_k]:
             doc = doc_map[cid]
-            # SearchResult is frozen — use dataclasses.replace to attach the rrf_score
             updated_metadata = {**doc.metadata, "rrf_score": round(rrf_scores[cid], 6)}
             fused.append(replace(doc, metadata=updated_metadata))
 
