@@ -5,7 +5,11 @@ import logging
 from langchain_core.messages import HumanMessage, AIMessage
 
 from app.core.config import Settings
+from app.memory.extractor import MemoryExtractor
+from app.memory.service import MemoryService
+from database.sqlite import get_connection
 from .state import RAGState
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +19,14 @@ class RAGNodes:
     Collection of all node functions used inside the RAG StateGraph.
 
     Nodes (in execution order):
+        load_memory     → load persisted facts about the user
         retrieve        → fetch candidate chunks from the vector store
         rerank          → cross-encoder re-scoring of retrieved chunks
         grade_documents → decide if chunks are relevant enough
         rewrite_query   → LLM rewrites the question for a better search
         build_context   → format chunks into a single context string
         generate        → LLM produces the final answer
+        save_memory     → extract and persist new long-term memories
     """
 
     def __init__(self, retriever, reranker, context_builder, llm) -> None:
@@ -184,7 +190,26 @@ class RAGNodes:
         return {"context": context}
 
     # ──────────────────────────────────────────────────────────────────
-    # Node 6 — Generate
+    # Node 6 — Load long-term memory
+    # ──────────────────────────────────────────────────────────────────
+
+    def load_memory(self, state: RAGState) -> dict:
+        """Load persisted facts about the authenticated user."""
+        user_id = state.get("user_id")
+        if not user_id:
+            return {"long_term_memories": []}
+
+        conn = get_connection()
+        try:
+            memories = MemoryService(conn).get_user_memories(user_id=user_id, limit=10)
+        finally:
+            conn.close()
+
+        logger.info("Loaded %d long-term memories (user=%s)", len(memories), user_id)
+        return {"long_term_memories": [item.memory for item in memories]}
+
+    # ──────────────────────────────────────────────────────────────────
+    # Node 7 — Generate
     # ──────────────────────────────────────────────────────────────────
 
     def generate(self, state: RAGState) -> dict:
@@ -207,7 +232,13 @@ class RAGNodes:
         if not context:
             logger.info("No context available — LLM will answer from chat history if possible.")
 
-        answer = self.llm.generate(question=question, context=context, chat_history=history_dicts)
+        memories = state.get("long_term_memories") or []
+        answer = self.llm.generate(
+            question=question,
+            context=context,
+            chat_history=history_dicts,
+            long_term_memories=memories,
+        )
 
         if observer:
             observer.on_generation_end()
@@ -217,3 +248,60 @@ class RAGNodes:
             # Return proper LangChain message objects — required by the add_messages reducer
             "chat_history": [HumanMessage(content=question), AIMessage(content=answer)],
         }
+
+    # ──────────────────────────────────────────────────────────────────
+    # Node 8 — Save long-term memory
+    # ──────────────────────────────────────────────────────────────────
+
+    def save_memory(self, state: RAGState) -> dict:
+        """Extract durable facts from this turn and persist them."""
+        user_id = state.get("user_id")
+        question = state.get("question", "")
+        answer = state.get("answer", "")
+
+        if not user_id or not question or not answer:
+            return {}
+
+        conversation = f"User: {question}\nAssistant: {answer}"
+        conn = get_connection()
+        try:
+            memory_service = MemoryService(conn)
+            existing = memory_service.get_user_memories(user_id=user_id, limit=20)
+            decision = MemoryExtractor(self.llm).decide(
+                user_id=user_id,
+                conversation=conversation,
+                existing_memories=existing,
+            )
+
+            if decision.action == "ADD" and decision.memory:
+                memory_service.create_memory(
+                    user_id=user_id,
+                    memory=decision.memory,
+                    memory_type=decision.memory_type or "general",
+                    importance=decision.importance,
+                )
+                logger.info("Stored long-term memory for user=%s: %s", user_id, decision.memory)
+            elif decision.action == "UPDATE" and decision.memory and decision.memory_id:
+                updated = memory_service.update_memory(
+                    memory_id=decision.memory_id,
+                    memory=decision.memory,
+                    memory_type=decision.memory_type or "general",
+                    importance=decision.importance,
+                    user_id=user_id,
+                )
+                if updated:
+                    logger.info("Updated long-term memory %s for user=%s", decision.memory_id, user_id)
+                else:
+                    logger.warning(
+                        "Memory UPDATE skipped; id %s not found for user=%s",
+                        decision.memory_id,
+                        user_id,
+                    )
+            else:
+                logger.info("No long-term memory change (action=%s)", decision.action)
+        except Exception:
+            logger.exception("Failed to persist long-term memory for user=%s", user_id)
+        finally:
+            conn.close()
+
+        return {}
