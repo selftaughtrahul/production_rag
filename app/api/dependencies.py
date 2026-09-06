@@ -156,3 +156,16 @@ def get_hybrid_rag_graph():
     )
 
     return _build_common_rag_graph(retriever)
+
+
+@lru_cache(maxsize=1)
+def get_llm() -> ClaudeService:
+    """
+    Return the shared ClaudeService instance.
+
+    Inject this via Depends(get_llm) whenever an endpoint needs
+    to call the LLM directly (e.g. streaming) without going through
+    the full LangGraph.
+    """
+    return ClaudeService()
+

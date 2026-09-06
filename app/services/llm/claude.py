@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 
-from anthropic import Anthropic
+from anthropic import Anthropic, AsyncAnthropic
 from dotenv import load_dotenv
 from langsmith import traceable
 
@@ -24,11 +25,14 @@ class ClaudeService:
             "",
         ).strip()
 
+        # Synchronous client — used by generate(), generate_text(), rewrite_query()
         self.client = Anthropic(api_key=self.api_key) if self.api_key else None
 
-    def _check_client(self) -> None:
-        """Ensure Anthropic client is configured."""
+        # Async client — used by generate_stream() for token-by-token streaming
+        self.async_client = AsyncAnthropic(api_key=self.api_key) if self.api_key else None
 
+    def _check_client(self) -> None:
+        """Raise a clear error when ANTHROPIC_API_KEY is missing."""
         if self.client is None:
             raise RuntimeError(
                 "ANTHROPIC_API_KEY is not configured. "
@@ -127,6 +131,78 @@ Question:
         )
 
         return response.content[0].text.strip()
+
+    # ──────────────────────────────────────────────────────────────────
+    # Streaming variant — yields one text token at a time
+    # ──────────────────────────────────────────────────────────────────
+
+    async def generate_stream(
+        self,
+        question: str,
+        context: str,
+        chat_history: list[dict[str, str]] | None = None,
+        long_term_memories: list[str] | None = None,
+    ) -> AsyncIterator[str]:
+        """
+        Stream the RAG answer token by token.
+
+        Usage (in an async context)::
+
+            async for token in claude.generate_stream(question, context):
+                print(token, end="", flush=True)
+
+        Yields:
+            str — each text token as it arrives from the Anthropic API.
+        """
+        self._check_client()
+
+        # ── Build system prompt ────────────────────────────────────────
+        system_prompt = """\
+You are an expert, direct, and concise AI assistant integrated with a RAG pipeline.
+
+Guidelines:
+- Answer the user's question using the provided Context documents.
+- If the user asks a conversational question (e.g. "what is my name?"), \
+answer naturally using the chat history and long-term memories.
+- Use long-term memories as persistent facts about the user.
+- Provide a single, cohesive, well-structured answer.
+- Do NOT generate multiple responses or alternative versions.
+- Do NOT start with filler like "Based on the provided context:".
+- If context is empty and the answer is not in chat history or memories, \
+respond with: "I don't have enough information in the provided documents to answer this question."
+- Do not make up facts or extrapolate beyond what is stated.
+"""
+
+        # ── Build user turn ────────────────────────────────────────────
+        memories_text = (
+            "\n".join(f"- {item}" for item in (long_term_memories or []))
+            or "(none)"
+        )
+
+        user_turn = f"""Long-term memories about the user:
+{memories_text}
+
+Context:
+{context}
+
+Question:
+{question}"""
+
+        # ── Assemble message list (history + current turn) ─────────────
+        messages: list[dict[str, str]] = []
+        if chat_history:
+            messages.extend(chat_history)
+        messages.append({"role": "user", "content": user_turn})
+
+        # ── Stream from Anthropic ──────────────────────────────────────
+        async with self.async_client.messages.stream(
+            model=self.model,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=messages,
+        ) as stream:
+            async for text_token in stream.text_stream:
+                yield text_token
 
     @traceable(run_type="llm", name="Claude Rewrite Query")
     def rewrite_query(
