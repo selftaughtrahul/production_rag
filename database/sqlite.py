@@ -111,10 +111,39 @@ def init_db() -> None:
             """
         )
 
+        # User Memories table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_memories (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                memory TEXT NOT NULL,
+                memory_type TEXT NOT NULL DEFAULT 'general',
+                importance REAL NOT NULL DEFAULT 0.5,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (user_id)
+                    REFERENCES users(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+        
+        # Index on user_id and is_active for user_memories
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_user_active_memories 
+            ON user_memories (user_id, is_active)
+            """
+        )
+
         conn.commit()
 
         print("[DB] users table ready.")
         print("[DB] documents table ready.")
+        print("[DB] user_memories table ready.")
 
     except Exception:
         conn.rollback()
