@@ -78,6 +78,7 @@ class ClaudeService:
         question: str,
         context: str,
         chat_history: list[dict[str, str]] | None = None,
+        long_term_memories: list[str] | None = None,
     ) -> str:
         """
         Generate the final RAG answer using retrieved context.
@@ -90,15 +91,21 @@ You are an expert, direct, and concise AI assistant integrated with a RAG pipeli
 
 Guidelines:
 - Your primary task is to answer the user's question using the provided Context documents.
-- If the user asks a conversational question or asks something based on the chat history (like "what is my name?"), answer naturally using the chat history.
+- If the user asks a conversational question or asks something based on the chat history (like "what is my name?"), answer naturally using the chat history and long-term memories.
+- Use long-term memories as persistent facts about the user. Prefer them over chat history when they conflict with older turns.
 - Provide a single, cohesive, well-structured answer.
 - Do NOT generate multiple responses, alternative versions, simulated dialogue, or section separators.
 - Do NOT start your response with filler phrases like "Based on the provided context:", "According to the documents:".
-- If the user asks a factual question that requires documents, but the context is empty and it's not in the chat history, respond with: "I don't have enough information in the provided documents to answer this question."
+- If the user asks a factual question that requires documents, but the context is empty and it's not in the chat history or memories, respond with: "I don't have enough information in the provided documents to answer this question."
 - Do not make up facts or extrapolate beyond what is stated.
 """
 
-        user_prompt = f"""Context:
+        memories_text = "\n".join(f"- {item}" for item in (long_term_memories or [])) or "(none)"
+
+        user_prompt = f"""Long-term memories about the user:
+{memories_text}
+
+Context:
 {context}
 
 Question:
