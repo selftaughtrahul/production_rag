@@ -28,15 +28,7 @@ class IngestionPipeline:
         6. Upsert to BM25 SQLite FTS index  (if bm25_store provided)
     """
 
-    def __init__(
-        self,
-        loader,
-        cleaner,
-        chunker,
-        embedder,
-        vector_store: ChromaVectorStore,
-        bm25_store: BM25Store | None = None,
-    ) -> None:
+    def __init__(self, loader, cleaner, chunker, embedder, vector_store: ChromaVectorStore, bm25_store: BM25Store | None = None) -> None:
         self.loader = loader
         self.cleaner = cleaner
         self.chunker = chunker
@@ -44,13 +36,7 @@ class IngestionPipeline:
         self.vector_store = vector_store
         self.bm25_store = bm25_store
 
-    def ingest(
-        self,
-        source: str,
-        document_id: str,
-        filename: str,
-        user_id: str,
-    ) -> dict[str, Any]:
+    def ingest(self,source: str,document_id: str,filename: str,user_id: str) -> dict[str, Any]:
         """
         Run the full ingestion pipeline for a single document.
 
