@@ -10,14 +10,17 @@ def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None
     graph = StateGraph(RAGState)
 
     # Nodes
+    graph.add_node("load_memory", nodes.load_memory)
     graph.add_node("retrieve", nodes.retrieve)
     graph.add_node("reranker", nodes.rerank)
     graph.add_node("grade_documents", nodes.grade_documents)
     graph.add_node("rewrite", nodes.rewrite_query)
     graph.add_node("build_context", nodes.build_context)
     graph.add_node("generate", nodes.generate)
+    graph.add_node("save_memory", nodes.save_memory)
 
-    graph.add_edge(START, "retrieve")
+    graph.add_edge(START, "load_memory")
+    graph.add_edge("load_memory", "retrieve")
     graph.add_edge("retrieve", "reranker")
     graph.add_edge("reranker", "grade_documents")
     graph.add_conditional_edges(
@@ -31,7 +34,8 @@ def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None
 
     graph.add_edge("rewrite", "retrieve")
     graph.add_edge("build_context", "generate")
-    graph.add_edge("generate", END)
+    graph.add_edge("generate", "save_memory")
+    graph.add_edge("save_memory", END)
 
     return graph.compile(checkpointer=checkpointer)
 
