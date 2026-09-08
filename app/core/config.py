@@ -1,16 +1,11 @@
 """Central configuration for the RAG application."""
 
-from __future__ import annotations
-
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-
 from dotenv import load_dotenv
 
-# Docker supplies environment variables directly. For local uvicorn/Celery runs,
-# load the project .env file without replacing values already supplied by Docker.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 
@@ -21,6 +16,7 @@ def _optional_env(name: str) -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
+    
     # ── ChromaDB ──────────────────────────────
     chroma_host: str | None
     chroma_port: int

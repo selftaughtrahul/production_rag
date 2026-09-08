@@ -1,14 +1,13 @@
-from __future__ import annotations
+"""
 
+
+"""
 import json
-import logging
 import re
-
 from app.memory.models import MemoryDecision, UserMemory
 from app.prompts.memory_prompts import MEMORY_PROMPT
 from app.services.llm.claude import ClaudeService
 
-logger = logging.getLogger(__name__)
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -17,12 +16,7 @@ class MemoryExtractor:
     def __init__(self, llm: ClaudeService) -> None:
         self.llm = llm
 
-    def decide(
-        self,
-        user_id: str,
-        conversation: str,
-        existing_memories: list[UserMemory],
-    ) -> MemoryDecision:
+    def decide(self, user_id: str, conversation: str, existing_memories: list[UserMemory]) -> MemoryDecision:
         existing_text = (
             "\n".join(
                 f"- id={item.id} type={item.memory_type} importance={item.importance}: {item.memory}"
@@ -51,27 +45,20 @@ Return a JSON object with these keys:
 Return ONLY JSON.
 """
 
-        raw = self.llm.generate_text(
-            prompt=prompt,
-            system_prompt=MEMORY_PROMPT,
-            max_tokens=512,
-        )
+        raw = self.llm.generate_text(prompt=prompt,system_prompt=MEMORY_PROMPT,max_tokens=512)
 
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError:
             match = _JSON_BLOCK.search(raw)
             if not match:
-                logger.warning("Memory extractor returned unparseable output: %s", raw[:300])
                 return MemoryDecision(action="IGNORE", reason="unparseable extractor output")
             try:
                 payload = json.loads(match.group(0))
             except json.JSONDecodeError:
-                logger.warning("Memory extractor JSON block was invalid: %s", raw[:300])
                 return MemoryDecision(action="IGNORE", reason="invalid extractor json")
 
         try:
             return MemoryDecision.model_validate(payload)
         except Exception:
-            logger.warning("Memory extractor payload failed validation: %s", payload)
             return MemoryDecision(action="IGNORE", reason="invalid extractor payload")

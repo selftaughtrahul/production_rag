@@ -5,19 +5,16 @@ import logging
 import os
 import sys
 import time
-
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from typing import Any
+from core.config import Settings
 
 
-# ============================================================
-# CONFIG
-# ============================================================
+config = Settings()
 
-LOG_DIR = os.getenv("LOG_DIR", "logs")
-
+LOG_DIR = config.LOG_DIR
 MAX_LOG_SIZE = 50 * 1024 * 1024       # 50 MB
 BACKUP_COUNT = 10
 

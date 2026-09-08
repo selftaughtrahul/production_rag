@@ -7,10 +7,15 @@ from app.memory.models import UserMemory
 
 
 class MemoryService:
+    """
+    User Memory Service
+    manages CRUD and retrieval of user memories
+    """
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
 
     def get_user_memories(self, user_id: str, limit: int = 20) -> list[UserMemory]:
+        ''' Retrieve active memories for a user, ordered by importance '''
         cursor = self.conn.cursor()
         cursor.execute(
             """
@@ -24,17 +29,12 @@ class MemoryService:
         )
         return [UserMemory(**dict(row)) for row in cursor.fetchall()]
 
-    def create_memory(
-        self,
-        user_id: str,
-        memory: str,
-        memory_type: str,
-        importance: float,
-    ) -> UserMemory:
+    def create_memory(self, user_id: str, memory: str, memory_type: str, importance: float) -> UserMemory:
+        ''' Create memories for a user '''
+
         memory_id = str(uuid4())
         cursor = self.conn.cursor()
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO user_memories (
                 id, user_id, memory, memory_type, importance, is_active
             )
@@ -51,14 +51,9 @@ class MemoryService:
             importance=importance,
         )
 
-    def update_memory(
-        self,
-        memory_id: str,
-        memory: str,
-        memory_type: str,
-        importance: float,
-        user_id: str | None = None,
-    ) -> UserMemory | None:
+    def update_memory(self, memory_id: str, memory: str, memory_type: str, importance: float,user_id: str | None = None) -> UserMemory | None:
+        ''' Update memories for a user '''
+
         cursor = self.conn.cursor()
         if user_id:
             cursor.execute(
@@ -100,6 +95,8 @@ class MemoryService:
         return UserMemory(**dict(row)) if row else None
 
     def delete_memory(self, user_id: str, memory_id: str) -> bool:
+        ''' Delete memories for a user '''
+
         cursor = self.conn.cursor()
         cursor.execute(
             """
@@ -114,6 +111,8 @@ class MemoryService:
         return cursor.rowcount > 0
 
     def clear_user_memories(self, user_id: str) -> None:
+        ''' Delete all memories for a user '''
+
         cursor = self.conn.cursor()
         cursor.execute(
             """
