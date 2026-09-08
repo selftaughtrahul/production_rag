@@ -1,20 +1,14 @@
-from anthropic.types import browser_get_page_text_config_param
-from anthropic.types import browser_get_page_text_config_param
-from __future__ import annotations
-
-import logging
-
+from app.core.exceptions import handle_node_error
 from langchain_core.messages import HumanMessage, AIMessage
-
 from app.core.config import Settings
 from app.memory.extractor import MemoryExtractor
 from app.memory.service import MemoryService
 from database.sqlite import get_connection
 from .state import RAGState
-from app.core.exceptions import handle_node_error
+#rom core.observability import create_observability
 
 
-logger = logging.getLogger(__name__)
+
 
 
 class RAGNodes:
@@ -30,6 +24,9 @@ class RAGNodes:
         build_context   → format chunks into a single context string
         generate        → LLM produces the final answer
         save_memory     → extract and persist new long-term memories
+        error_handler   → handles errors in the pipeline
+
+
     """
 
     def __init__(self, retriever, reranker, context_builder, llm) -> None:
@@ -67,11 +64,6 @@ class RAGNodes:
                 metadata_filter=metadata_filter,
             )
 
-            logger.info(
-                "Retrieved %d chunks (user=%s)",
-                len(documents),
-                user_id,
-            )
 
             if observer:
                 observer.on_retrieval_end(
@@ -87,7 +79,6 @@ class RAGNodes:
             }
 
         except Exception as exc:
-            logger.exception("Retrieval failed")
             return handle_node_error(state,"retrieve",exc)
 
     # ──────────────────────────────────────────────────────────────────
@@ -105,7 +96,6 @@ class RAGNodes:
         documents = state.get("documents", [])
 
         if not documents:
-            logger.warning("Reranker received 0 documents — skipping.")
             return {"documents": []}
 
         settings = Settings.from_environment()
@@ -116,7 +106,6 @@ class RAGNodes:
             top_k=settings.rerank_top_k,
         )
 
-        logger.info("Reranked: %d → %d documents", len(documents), len(reranked))
         return {"documents": reranked}
 
     # ──────────────────────────────────────────────────────────────────
@@ -135,7 +124,6 @@ class RAGNodes:
         documents = state.get("documents", [])
 
         if not documents:
-            logger.warning("No documents to grade — marking as not relevant.")
             if observer:
                 observer.on_documents_graded(0)
             return {"documents_relevant": False}
@@ -148,10 +136,6 @@ class RAGNodes:
         is_relevant = len(relevant) > 0
         final_docs = relevant if is_relevant else documents[:3]
 
-        logger.info(
-            "Grading: %d docs → %d relevant (relevant=%s)",
-            len(documents), len(final_docs), is_relevant,
-        )
 
         if observer:
             observer.on_documents_graded(len(final_docs))
@@ -185,7 +169,6 @@ class RAGNodes:
 
             rewritten = self.llm.rewrite_query(question, chat_history=history_dicts)
 
-            logger.info("Query rewritten:\n  Before: %s\n  After:  %s", question, rewritten)
 
             if observer:
                 observer.on_query_rewritten()
@@ -240,7 +223,6 @@ class RAGNodes:
         finally:
             conn.close()
 
-        logger.info("Loaded %d long-term memories (user=%s)", len(memories), user_id)
         return {"long_term_memories": [item.memory for item in memories]}
 
     # ──────────────────────────────────────────────────────────────────
@@ -264,9 +246,7 @@ class RAGNodes:
             for m in state.get("chat_history", [])
         ]
 
-        if not context:
-            logger.info("No context available — LLM will answer from chat history if possible.")
-
+       
         memories = state.get("long_term_memories") or []
         answer = self.llm.generate(
             question=question,
@@ -315,7 +295,6 @@ class RAGNodes:
                     memory_type=decision.memory_type or "general",
                     importance=decision.importance,
                 )
-                logger.info("Stored long-term memory for user=%s: %s", user_id, decision.memory)
             elif decision.action == "UPDATE" and decision.memory and decision.memory_id:
                 updated = memory_service.update_memory(
                     memory_id=decision.memory_id,
@@ -324,18 +303,11 @@ class RAGNodes:
                     importance=decision.importance,
                     user_id=user_id,
                 )
-                if updated:
-                    logger.info("Updated long-term memory %s for user=%s", decision.memory_id, user_id)
-                else:
-                    logger.warning(
-                        "Memory UPDATE skipped; id %s not found for user=%s",
-                        decision.memory_id,
-                        user_id,
-                    )
+               
             else:
-                logger.info("No long-term memory change (action=%s)", decision.action)
+                print("no change in long-term memory (action=%s)", decision.action)
         except Exception:
-            logger.exception("Failed to persist long-term memory for user=%s", user_id)
+            print("Failed to persist long-term memory for user=%s", user_id)
         finally:
             conn.close()
 
@@ -347,6 +319,5 @@ class RAGNodes:
         error_node = state.get("error_node")
         error = state.get("error")
 
-        logger.error(f"RAG Error | node={error_node} | error={error}")
 
         return {"has_error": True}
