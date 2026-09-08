@@ -1,5 +1,6 @@
 import requests
 import json
+import streamlit as st
 
 BASE_URL = "http://localhost:8000"
 
@@ -16,9 +17,15 @@ class APIClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
+    def _check_auth(self, response):
+        if response.status_code == 401:
+            st.session_state.is_authenticated = False
+            self.token = None
+            st.rerun()
+
     def login(self, username, password):
         response = requests.post(
-            f"{BASE_URL}/auth/token",
+            f"{BASE_URL}/auth/login",
             data={"username": username, "password": password}
         )
         if response.status_code == 200:
@@ -38,6 +45,7 @@ class APIClient:
 
     def get_me(self):
         response = requests.get(f"{BASE_URL}/auth/me", headers=self.get_headers())
+        self._check_auth(response)
         if response.status_code == 200:
             return response.json()
         return None
@@ -49,22 +57,26 @@ class APIClient:
             headers=self.get_headers(),
             files=files
         )
+        self._check_auth(response)
         return response.status_code == 200, response.json() if response.status_code == 200 else response.text
 
     def list_documents(self):
         response = requests.get(f"{BASE_URL}/documents/", headers=self.get_headers())
+        self._check_auth(response)
         if response.status_code == 200:
             return response.json()
         return []
 
     def list_conversations(self):
         response = requests.get(f"{BASE_URL}/query/conversations", headers=self.get_headers())
+        self._check_auth(response)
         if response.status_code == 200:
             return response.json().get("sessions", [])
         return []
 
     def get_conversation(self, session_id):
         response = requests.get(f"{BASE_URL}/query/conversations/{session_id}", headers=self.get_headers())
+        self._check_auth(response)
         if response.status_code == 200:
             return response.json().get("messages", [])
         return []
@@ -80,6 +92,7 @@ class APIClient:
         headers["Content-Type"] = "application/json"
         
         response = requests.post(url, headers=headers, json=payload, stream=True)
+        self._check_auth(response)
         
         if response.status_code != 200:
             yield f"Error: {response.text}"

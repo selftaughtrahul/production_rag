@@ -36,3 +36,9 @@ documents/temp/
 
 # Logs
 *.log
+.claude/
+.agents/
+
+*-shm
+*-wal
+
