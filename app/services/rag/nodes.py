@@ -1,3 +1,5 @@
+from anthropic.types import browser_get_page_text_config_param
+from anthropic.types import browser_get_page_text_config_param
 from __future__ import annotations
 
 import logging
@@ -9,6 +11,7 @@ from app.memory.extractor import MemoryExtractor
 from app.memory.service import MemoryService
 from database.sqlite import get_connection
 from .state import RAGState
+from app.core.exceptions import handle_node_error
 
 
 logger = logging.getLogger(__name__)
@@ -40,40 +43,53 @@ class RAGNodes:
     # ──────────────────────────────────────────────────────────────────
 
     def retrieve(self, state: RAGState) -> dict:
-        observer = state.get("observer")
+        """ Retrieve documents from the vector store """
+        try:
+            observer = state.get("observer")
 
-        if observer:
-            observer.on_retrieval_start()
+            if observer:
+                observer.on_retrieval_start()
 
-        question = state["question"]
-        query = state.get("rewritten_question") or question
+            question = state["question"]
+            query = state.get("rewritten_question") or question
 
-        retry_count = state.get("retry_count", 0)
-        user_id = state.get("user_id")
+            user_id = state.get("user_id")
 
-        metadata_filter = {"user_id": user_id} if user_id else None
+            metadata_filter = (
+                {"user_id": user_id}
+                if user_id
+                else None
+            )
 
-        documents = self.retriever.retrieve(
-            query=query,
-            top_k=20,
-            metadata_filter=metadata_filter,
-        )
+            documents = self.retriever.retrieve(
+                query=query,
+                top_k=20,
+                metadata_filter=metadata_filter,
+            )
 
-        logger.info(
-            "Retrieved %d chunks (user=%s, attempt=%d)",
-            len(documents),
-            user_id,
-            retry_count + 1,
-        )
+            logger.info(
+                "Retrieved %d chunks (user=%s)",
+                len(documents),
+                user_id,
+            )
 
-        if observer:
-            observer.on_retrieval_end(document_count=len(documents))
+            if observer:
+                observer.on_retrieval_end(
+                    document_count=len(documents)
+                )
 
-        return {
-            "documents": documents,
-            "retry_count": retry_count + 1,
-        }
-    
+            return {
+                "documents": documents,
+                "has_error": False,
+                "error": None,
+                "error_node": None,
+                "error_type": None,
+            }
+
+        except Exception as exc:
+            logger.exception("Retrieval failed")
+            return handle_node_error(state,"retrieve",exc)
+
     # ──────────────────────────────────────────────────────────────────
     # Node 2 — Rerank
     # ──────────────────────────────────────────────────────────────────
@@ -155,23 +171,41 @@ class RAGNodes:
 
         Called when grade_documents decides the current results are not relevant.
         """
-        observer = state.get("observer")
-        question = state["question"]
-        # Convert LangChain messages → plain dicts for Claude API
-        history_dicts = [
-            {"role": "user" if isinstance(m, HumanMessage) else "assistant", "content": m.content}
-            for m in state.get("chat_history", [])
-        ]
+        try:
+            observer = state.get("observer")
+            question = state["question"]
 
-        rewritten = self.llm.rewrite_query(question, chat_history=history_dicts)
+            retry_count = state.get("retry_count", 0)
 
-        logger.info("Query rewritten:\n  Before: %s\n  After:  %s", question, rewritten)
+            # Convert LangChain messages → plain dicts for Claude API
+            history_dicts = [
+                {"role": "user" if isinstance(m, HumanMessage) else "assistant", "content": m.content}
+                for m in state.get("chat_history", [])
+            ]
 
-        if observer:
-            observer.on_query_rewritten()
-            observer.on_retry()
+            rewritten = self.llm.rewrite_query(question, chat_history=history_dicts)
 
-        return {"rewritten_question": rewritten}
+            logger.info("Query rewritten:\n  Before: %s\n  After:  %s", question, rewritten)
+
+            if observer:
+                observer.on_query_rewritten()
+                observer.on_retry()
+
+            return {
+                "rewritten_question": rewritten,
+                "retry_count": retry_count + 1,
+                "has_error": False,
+                "error": None,
+                "error_node": None,
+                "error_type": None,
+            }
+        except Exception as exc:
+
+            return handle_node_error(
+                state,
+                "rewrite",
+                exc,
+            )
 
     # ──────────────────────────────────────────────────────────────────
     # Node 5 — Build Context
@@ -306,3 +340,13 @@ class RAGNodes:
             conn.close()
 
         return {}
+
+    def error_handler(self, state: RAGState):
+        """Handle errors that occur in any RAG pipeline node."""
+
+        error_node = state.get("error_node")
+        error = state.get("error")
+
+        logger.error(f"RAG Error | node={error_node} | error={error}")
+
+        return {"has_error": True}

@@ -17,3 +17,10 @@ class RAGState(TypedDict, total=False):
     chat_history: Annotated[list[BaseMessage], add_messages]  # HumanMessage / AIMessage objects
     long_term_memories: list[Any] # retrieved facts about the user
 
+    error: str | None           # error message if any
+    error_node: str | None      # node where error occurred
+    error_type: str | None      # type of error (e.g., "llm", "retrieval")
+    has_error: bool             # convenience flag
+    error_retry_count: int      # number of error retries
+
+

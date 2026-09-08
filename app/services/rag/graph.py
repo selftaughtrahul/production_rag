@@ -1,7 +1,8 @@
 from langgraph.graph import StateGraph, END, START
 from .state import RAGState
 from .nodes import RAGNodes
-from .edge import decide_after_grading
+from .edge import decide_after_grading, decide_after_error
+
 
 def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None):
 
@@ -14,6 +15,7 @@ def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None
 
     graph = StateGraph(RAGState)
 
+
     # Nodes
     graph.add_node("load_memory", nodes.load_memory)
     graph.add_node("retrieve", nodes.retrieve)
@@ -24,12 +26,27 @@ def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None
     graph.add_node("generate", nodes.generate)
     graph.add_node("save_memory", nodes.save_memory)
 
-    # Flow
+    # Start
     graph.add_edge(START, "load_memory")
+
+    # Memory → Retrieval
     graph.add_edge("load_memory", "retrieve")
-    graph.add_edge("retrieve", "reranker")
+
+    # Retrieval error handling
+    graph.add_conditional_edges(
+        "retrieve",
+        decide_after_error,
+        {
+            "continue": "reranker",
+            "retry": "retrieve",
+            "fallback": "build_context",
+        },
+    )
+
+    # Reranking
     graph.add_edge("reranker", "grade_documents")
 
+    # Document grading
     graph.add_conditional_edges(
         "grade_documents",
         decide_after_grading,
@@ -39,9 +56,16 @@ def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None
         },
     )
 
+    # Query rewriting
     graph.add_edge("rewrite", "retrieve")
+
+    # Context → Generation
     graph.add_edge("build_context", "generate")
+
+    # Generation → Memory
     graph.add_edge("generate", "save_memory")
+
+    # End
     graph.add_edge("save_memory", END)
 
     return graph.compile(checkpointer=checkpointer)
