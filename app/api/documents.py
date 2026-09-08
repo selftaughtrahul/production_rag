@@ -1,33 +1,27 @@
 """
 Document management routes.
 
-    POST   /ingest                → Upload and ingest a document
-    GET    /documents             → List the authenticated user's documents
-    DELETE /documents/{id}        → Delete a document and all its chunks
-    GET    /tasks/{task_id}       → Check background task status
+ 
 """
-from __future__ import annotations
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
-
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from typing import List
-
 from app.api.dependencies import build_components, build_ingestion_pipeline
 from app.models.schemas import DocumentResponse, UserInDB
 from app.services.auth.dependencies import get_current_user
 from app.tasks.tasks import ingest_document_task
 from database.sqlite import get_db
+from app.core.config import Settings
+settings = Settings.from_environment()
 
 router = APIRouter(tags=["Documents"])
 
 
-# ─────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────
+
 
 def _save_upload(file: UploadFile, content: bytes) -> str:
     """Save uploaded bytes to a temp file and return its path."""
@@ -40,10 +34,6 @@ def _save_upload(file: UploadFile, content: bytes) -> str:
         tmp.write(content)
         return tmp.name
 
-
-# ─────────────────────────────────────────────────────────────
-# GET /tasks/{task_id}
-# ─────────────────────────────────────────────────────────────
 
 @router.get("/tasks/{task_id}", summary="Check background task status")
 async def get_task_status(task_id: str):
@@ -60,16 +50,9 @@ async def get_task_status(task_id: str):
     return response
 
 
-# ─────────────────────────────────────────────────────────────
-# POST /ingest
-# ─────────────────────────────────────────────────────────────
 
 @router.post("/ingest", summary="Upload and ingest a document")
-async def ingest_document(
-    file: UploadFile = File(...),
-    current_user: UserInDB = Depends(get_current_user),
-    db=Depends(get_db),
-):
+async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
     """
     Upload a document and ingest it into the vector store.
 
@@ -86,8 +69,7 @@ async def ingest_document(
     document_id = str(uuid4())
     temp_path = _save_upload(file, content)
 
-    # ── Background mode (Linux/Celery) ─────────────────────
-    IS_ASYNC = False  # Set True when Celery worker is running
+    IS_ASYNC = settings.IS_ASYNC
     if IS_ASYNC:
         task = ingest_document_task.delay(
             source=temp_path,
@@ -134,10 +116,7 @@ async def ingest_document(
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/documents", response_model=List[DocumentResponse], summary="List user documents")
-async def list_documents(
-    current_user: UserInDB = Depends(get_current_user),
-    db=Depends(get_db),
-):
+async def list_documents( current_user: UserInDB = Depends(get_current_user), db=Depends(get_db)):
     """List all documents uploaded by the authenticated user."""
     conn, cursor = db
     cursor.execute(
@@ -147,16 +126,9 @@ async def list_documents(
     return [dict(row) for row in cursor.fetchall()]
 
 
-# ─────────────────────────────────────────────────────────────
-# DELETE /documents/{document_id}
-# ─────────────────────────────────────────────────────────────
 
 @router.delete("/documents/{document_id}", summary="Delete a document")
-async def delete_document(
-    document_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-    db=Depends(get_db),
-):
+async def delete_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
     """
     Delete a document and all its vector chunks.
     Only the owning user can delete their own documents.
@@ -167,10 +139,7 @@ async def delete_document(
     components = build_components()
     vector_store = components.vector_store
 
-    chunks_count = vector_store.count_document_chunks(
-        document_id,
-        metadata_filter={"user_id": current_user.id},
-    )
+    chunks_count = vector_store.count_document_chunks(document_id,metadata_filter={"user_id": current_user.id})
 
     if chunks_count == 0:
         raise HTTPException(
@@ -181,10 +150,7 @@ async def delete_document(
     vector_store.delete_document(document_id)
 
     conn, cursor = db
-    cursor.execute(
-        "DELETE FROM documents WHERE id = ? AND user_id = ?",
-        (document_id, current_user.id),
-    )
+    cursor.execute("DELETE FROM documents WHERE id = ? AND user_id = ?",(document_id, current_user.id),)
 
     return {
         "success": True,

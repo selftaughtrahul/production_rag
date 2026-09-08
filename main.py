@@ -3,21 +3,13 @@ RAG API — application entry point.
 
 Registers all routers and initialises the database on startup.
 """
-from __future__ import annotations
-
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
-
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.query import router as query_router
 from database.sqlite import init_db
 
-
-# ─────────────────────────────────────────────────────────────
-# Lifespan — runs once on startup / shutdown
-# ─────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,9 +18,6 @@ async def lifespan(app: FastAPI):
     yield
 
 
-# ─────────────────────────────────────────────────────────────
-# App
-# ─────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="RAG API",

@@ -2,33 +2,17 @@
 Auth API — register, login, and current-user endpoints.
 """
 
-from __future__ import annotations
-
 from uuid import uuid4
-
 from fastapi import APIRouter, Depends, HTTPException, status
-
-from app.models.schemas import (
-    LoginRequest,
-    RegisterRequest,
-    TokenResponse,
-    UserInDB,
-)
-from app.services.auth.auth_service import (
-    create_access_token,
-    hash_password,
-    verify_password,
-)
+from fastapi.security import OAuth2PasswordRequestForm
+from app.models.schemas import (LoginRequest, RegisterRequest, TokenResponse, UserInDB)
+from app.services.auth.auth_service import (create_access_token, hash_password,verify_password)
 from app.services.auth.dependencies import get_current_user
 from database.sqlite import get_db
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-@router.post(
-    "/register",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(request: RegisterRequest, db=Depends(get_db)):
     """
     Create a new user account and return a JWT access token.
@@ -37,10 +21,7 @@ def register(request: RegisterRequest, db=Depends(get_db)):
     conn, cursor = db
 
     # Check for duplicate email
-    cursor.execute(
-        "SELECT id FROM users WHERE email = ?",
-        (request.email,),
-    )
+    cursor.execute("SELECT id FROM users WHERE email = ?",(request.email,),)
 
     if cursor.fetchone():
         raise HTTPException(
@@ -49,10 +30,7 @@ def register(request: RegisterRequest, db=Depends(get_db)):
         )
 
     # Check for duplicate username
-    cursor.execute(
-        "SELECT id FROM users WHERE username = ?",
-        (request.username,),
-    )
+    cursor.execute("SELECT id FROM users WHERE username = ?",(request.username,),)
 
     if cursor.fetchone():
         raise HTTPException(
@@ -86,18 +64,11 @@ def register(request: RegisterRequest, db=Depends(get_db)):
     )
 
     # Create JWT
-    token = create_access_token(
-        user_id=user_id,
-        username=request.username,
-    )
+    token = create_access_token(user_id=user_id,username=request.username)
 
-    return TokenResponse(
-        access_token=token,
-        user_id=user_id,
-        username=request.username,
-    )
+    return TokenResponse(access_token=token,user_id=user_id,username=request.username)
 
-from fastapi.security import OAuth2PasswordRequestForm
+
 
 @router.post("/login", response_model=TokenResponse)
 def login(request: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):

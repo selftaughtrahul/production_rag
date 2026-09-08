@@ -59,6 +59,10 @@ class Settings:
     bm25_top_k: int
     fusion_top_k: int
     rerank_top_k: int
+    LOG_DIR:str
+    IS_ASYNC:bool
+
+
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -103,6 +107,11 @@ class Settings:
             bm25_top_k=int(os.getenv("BM25_TOP_K", "20")),
             fusion_top_k=int(os.getenv("FUSION_TOP_K", "20")),
             rerank_top_k=int(os.getenv("RERANK_TOP_K", "5")),
+            IS_ASYNC=bool(os.get('IS_ASYNC', 'False')),
+            LOG_DIR=str(os.get('LOG_DIR', 'False')),
+
+
+
         )
 
     def collection_name_for(self, embedding_dimension: int) -> str:
