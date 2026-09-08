@@ -67,12 +67,17 @@ class ClaudeService:
             "content": prompt,
         })
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            system=system_prompt or "You are a helpful assistant.",
-            messages=messages,
-        )
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                system=system_prompt or "You are a helpful assistant.",
+                messages=messages,
+            )
+        except Exception as e:
+            if "billing" in str(e).lower():
+                return "I'm having trouble accessing my knowledge base right now. Please check my account details or try again later."
+            raise
 
         return response.content[0].text.strip()
 
@@ -123,12 +128,17 @@ Question:
             "content": user_prompt,
         })
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=messages,
-        )
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                system=system_prompt,
+                messages=messages,
+            )
+        except Exception as e:
+            if "billing" in str(e).lower():
+                return "I'm having trouble accessing my knowledge base right now. Please check my account details or try again later."
+            raise
 
         return response.content[0].text.strip()
 

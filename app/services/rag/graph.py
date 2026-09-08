@@ -25,6 +25,7 @@ def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None
     graph.add_node("build_context", nodes.build_context)
     graph.add_node("generate", nodes.generate)
     graph.add_node("save_memory", nodes.save_memory)
+    graph.add_node("error_handler",nodes.error_handler)
 
     # Start
     graph.add_edge(START, "load_memory")
@@ -51,21 +52,35 @@ def build_rag_graph(retriever, reranker, context_builder, llm, checkpointer=None
         "grade_documents",
         decide_after_grading,
         {
-            "generate": "build_context",
+            "build_context": "build_context",
             "rewrite": "rewrite",
+            "error_handler": "error_handler",
         },
     )
+   
+    graph.add_edge("rewrite","retrieve")
 
-    # Query rewriting
-    graph.add_edge("rewrite", "retrieve")
+    # ============================================================
+    # CONTEXT → GENERATE
+    # ============================================================
 
-    # Context → Generation
-    graph.add_edge("build_context", "generate")
+    graph.add_edge("build_context","generate")
 
-    # Generation → Memory
-    graph.add_edge("generate", "save_memory")
+    # ============================================================
+    # GENERATE → SAVE MEMORY
+    # ============================================================
 
-    # End
-    graph.add_edge("save_memory", END)
+    graph.add_edge("generate","save_memory")
 
-    return graph.compile(checkpointer=checkpointer)
+    # ============================================================
+    # END
+    # ============================================================
+
+    graph.add_edge("save_memory",END)
+
+    # Error handler → END
+    graph.add_edge("error_handler",END)
+
+    return graph.compile(
+        checkpointer=checkpointer,
+    )

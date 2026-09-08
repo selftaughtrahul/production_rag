@@ -145,7 +145,7 @@ def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None
         },
         config={
             "configurable": {"thread_id": thread_id},
-            "run_name": "rag-query",
+            "run_name": question,
             "tags": ["rag", "corrective-rag"],
             "metadata": {"source": "fastapi", "user_id": user_id, "session_id": thread_id},
         },
@@ -351,4 +351,4 @@ async def get_conversation_history(
             "session_id": session_id,
             "messages": messages,
         }
-
+
