@@ -12,7 +12,6 @@ class RAGState(TypedDict, total=False):
     answer: str                 # final answer from LLM
     documents_relevant: bool    # grading result: True → generate, False → rewrite
     retry_count: int            # number of retrieve-rewrite loops so far
-    observer: Any               # RAGObserver instance for metrics
     user_id: str                # authenticated user ID — used for metadata filtering
     chat_history: Annotated[list[BaseMessage], add_messages]  # HumanMessage / AIMessage objects
     long_term_memories: list[Any] # retrieved facts about the user
@@ -22,5 +21,13 @@ class RAGState(TypedDict, total=False):
     error_type: str | None      # type of error (e.g., "llm", "retrieval")
     has_error: bool             # convenience flag
     error_retry_count: int      # number of error retries
+
+    input_guardrail_passed: bool 
+    input_guardrail_reason: str
+
+    output_guardrail_passed: bool
+    output_guardrail_reason: str
+
+    guardrail_metadata: dict[str, Any]
 
 

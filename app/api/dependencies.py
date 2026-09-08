@@ -22,6 +22,11 @@ from app.services.llm.claude import ClaudeService
 from app.services.rag.graph import build_rag_graph
 from app.services.vectorstore.chroma import ChromaVectorStore
 
+from app.guardrails.factory import (
+    build_input_guardrails,
+    build_output_guardrails
+)
+
 
 from database.sqlite import get_connection
 
@@ -104,12 +109,16 @@ def _build_common_rag_graph(retriever):
     reranker = CrossEncoderReranker(model=reranker_model)
     
     llm = ClaudeService()
-
+    input_guardrail = build_input_guardrails()
+    output_guardrail = build_output_guardrails()
+    
     return build_rag_graph(
         retriever=retriever,
         reranker=reranker,
         context_builder=context_builder,
         llm=llm,
+        input_guardrails=input_guardrail,
+        output_guardrails=output_guardrail,
         checkpointer=checkpointer,
     )
 

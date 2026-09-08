@@ -32,3 +32,23 @@ def decide_after_error(state: RAGState):
         return "retry"
 
     return "fallback"
+
+def decide_after_input_guardrail(state: RAGState):
+
+    if not state.get("input_guardrail_passed", True):
+        return "blocked"
+
+    return "continue"
+
+
+def decide_after_output_guardrail(state: RAGState):
+
+    if state.get("output_guardrail_passed", True):
+        return "continue"
+
+    retry_count = state.get("retry_count", 0)
+
+    if retry_count >= 2:
+        return "error"
+
+    return "retry"

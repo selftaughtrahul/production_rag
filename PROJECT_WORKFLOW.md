@@ -30,7 +30,6 @@ basic_rag/
     ├── core/                        # Settings, logger, exceptions
     ├── models/
     │   └── schemas.py               # Pydantic request/response models
-    ├── observability/               # RAGObserver, RAGEvaluator, metrics
     ├── tasks/                       # Celery background tasks (async ingest)
     └── services/
         ├── auth/                    # JWT, password hashing, auth middleware

@@ -13,7 +13,6 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app.api.dependencies import get_rag_graph, get_hybrid_rag_graph, get_llm
 from app.models.schemas import QueryRequest, UserInDB
-from app.observability import RAGObserver, RAGEvaluator
 from app.services.auth.dependencies import get_current_user
 from app.services.llm.claude import ClaudeService
 from database.sqlite import get_connection
@@ -102,9 +101,7 @@ async def _stream_answer(llm, question: str, state: dict) -> tuple[str, object]:
 
 def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None = None) -> dict:
     """Shared invocation logic for both query endpoints."""
-    observer = RAGObserver()
-    evaluator = RAGEvaluator()
-
+ 
     thread_id = session_id or generate_new_session_id()
 
     result = rag_graph.invoke(
@@ -121,12 +118,6 @@ def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None
         },
     )
 
-    metrics = observer.finish()
-    evaluation = evaluator.evaluate(
-        question=question,
-        answer=result.get("answer", ""),
-        context=result.get("context", ""),
-    ).as_dict()
 
     return {
         "success": True,
@@ -142,12 +133,7 @@ def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None
 
 
 @router.post("/stream", summary="Query with token-by-token streaming (SSE)")
-async def query_documents_stream(
-    request: QueryRequest,
-    rag_graph=Depends(get_rag_graph),
-    llm: ClaudeService = Depends(get_llm),
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def query_documents_stream(request: QueryRequest,rag_graph=Depends(get_rag_graph),llm: ClaudeService = Depends(get_llm),current_user: UserInDB = Depends(get_current_user)):
     """
     Ask a question and receive the answer streamed token by token.
 
@@ -163,8 +149,7 @@ async def query_documents_stream(
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     thread_id = request.session_id or generate_new_session_id()
-    observer = RAGObserver()
-    evaluator = RAGEvaluator()
+
 
     async def event_generator():
         full_answer = ""
@@ -190,20 +175,13 @@ async def query_documents_stream(
                     full_answer += token
                     yield f'data: {json.dumps({"type": "token", "content": token})}\n\n'
 
-            metrics = observer.finish()
-            evaluation = evaluator.evaluate(
-                question=request.question,
-                answer=full_answer,
-                context=state.get("context", ""),
-            ).as_dict()
-
+         
             done_event = {
                 "type": "done",
                 "session_id": thread_id,
                 "question": request.question,
                 "answer": full_answer,
-                "metrics": metrics,
-                "evaluation": evaluation,
+               
             }
             yield f"data: {json.dumps(done_event)}\n\n"
 
@@ -222,11 +200,7 @@ async def query_documents_stream(
     )
 
 @router.post("/", summary="Query (Dense retrieval)")
-async def query_documents(
-    request: QueryRequest,
-    rag_graph=Depends(get_rag_graph),
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def query_documents(request: QueryRequest,rag_graph=Depends(get_rag_graph),current_user: UserInDB = Depends(get_current_user)):
     """
     Ask a question using dense vector search only.
 
@@ -238,11 +212,7 @@ async def query_documents(
     return _invoke_graph(rag_graph, request.question, current_user.id, request.session_id)
 
 @router.post("/hybrid", summary="Query (Hybrid: Dense + BM25 + RRF)")
-async def query_documents_hybrid(
-    request: QueryRequest,
-    rag_graph=Depends(get_hybrid_rag_graph),
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def query_documents_hybrid(request: QueryRequest,rag_graph=Depends(get_hybrid_rag_graph),current_user: UserInDB = Depends(get_current_user)):
     """
     Ask a question using hybrid retrieval (Dense Vector + BM25 Keyword).
 

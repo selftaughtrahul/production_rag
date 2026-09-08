@@ -2,6 +2,7 @@
 Collection of RAG pipeline node implementations.
 """
 
+from anthropic.types import browser_get_page_text_config_param
 from langchain_core.messages import HumanMessage, AIMessage
 
 from app.core.config import Settings
@@ -10,7 +11,6 @@ from app.memory.extractor import MemoryExtractor
 from app.memory.service import MemoryService
 from database.sqlite import get_connection
 from .state import RAGState
-#rom core.observability import create_observability
 
 
 
@@ -34,11 +34,13 @@ class RAGNodes:
 
     """
 
-    def __init__(self, retriever, reranker, context_builder, llm) -> None:
+    def __init__(self, retriever, reranker, context_builder, llm, input_guardrail=None, output_guardrail = None) -> None:
         self.retriever = retriever
         self.reranker = reranker
         self.context_builder = context_builder
         self.llm = llm
+        self.input_guardrails = input_guardrail
+        self.output_guardrails = output_guardrail
 
     # ──────────────────────────────────────────────────────────────────
     # Node 1 — Retrieve
@@ -47,10 +49,7 @@ class RAGNodes:
     def retrieve(self, state: RAGState) -> dict:
         """ Retrieve documents from the vector store """
         try:
-            observer = state.get("observer")
-
-            if observer:
-                observer.on_retrieval_start()
+           
 
             question = state["question"]
             query = state.get("rewritten_question") or question
@@ -69,11 +68,6 @@ class RAGNodes:
                 metadata_filter=metadata_filter,
             )
 
-
-            if observer:
-                observer.on_retrieval_end(
-                    document_count=len(documents)
-                )
 
             return {
                 "documents": documents,
@@ -125,12 +119,11 @@ class RAGNodes:
         Any document with a score >= -1.0 is considered relevant
         (cross-encoder scores are negative; higher is better).
         """
-        observer = state.get("observer")
+      
         documents = state.get("documents", [])
 
         if not documents:
-            if observer:
-                observer.on_documents_graded(0)
+           
             return {"documents_relevant": False}
 
         relevant = [
@@ -142,8 +135,6 @@ class RAGNodes:
         final_docs = relevant if is_relevant else documents[:3]
 
 
-        if observer:
-            observer.on_documents_graded(len(final_docs))
 
         return {
             "documents": final_docs,
@@ -161,7 +152,6 @@ class RAGNodes:
         Called when grade_documents decides the current results are not relevant.
         """
         try:
-            observer = state.get("observer")
             question = state["question"]
 
             retry_count = state.get("retry_count", 0)
@@ -174,10 +164,6 @@ class RAGNodes:
 
             rewritten = self.llm.rewrite_query(question, chat_history=history_dicts)
 
-
-            if observer:
-                observer.on_query_rewritten()
-                observer.on_retry()
 
             return {
                 "rewritten_question": rewritten,
@@ -238,9 +224,7 @@ class RAGNodes:
         """
         Generate the final answer using the LLM and the built context.
         """
-        observer = state.get("observer")
-        if observer:
-            observer.on_generation_start()
+ 
 
         question = state["question"]
         context = state.get("context", "")
@@ -260,8 +244,7 @@ class RAGNodes:
             long_term_memories=memories,
         )
 
-        if observer:
-            observer.on_generation_end()
+       
 
         return {
             "answer": answer,
@@ -326,3 +309,44 @@ class RAGNodes:
 
 
         return {"has_error": True}
+
+    async def validate_input(self, state: RAGState):
+
+        if self.input_guardrails is None:
+            return state
+
+        result = await self.input_guardrails.validate(
+            state["query"]
+        )
+
+        return {
+            **state,
+            "input_guardrail_passed": result.passed,
+            "input_guardrail_reason": result.reason,
+            "guardrail_metadata": result.metadata,
+
+        }
+    
+    async def validate_output(self, state: RAGState):
+
+        if self.output_guardrails is None:
+            return {
+                **state,
+                "output_guardrail_passed": True,
+            }
+
+        result = await self.output_guardrails.validate(
+            query=state["query"],
+            response=state["answer"],
+            context=state.get("context"),
+        )
+
+        return {
+            **state,
+            "output_guardrail_passed": result.passed,
+            "output_guardrail_reason": result.reason,
+            "guardrail_metadata": {
+                **state.get("guardrail_metadata", {}),
+                **result.metadata,
+            },
+        }
