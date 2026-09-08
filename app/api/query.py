@@ -1,9 +1,11 @@
-from __future__ import annotations
 
+""" 
+
+
+"""
 import json
 import sqlite3
 import uuid
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage
@@ -15,13 +17,11 @@ from app.observability import RAGObserver, RAGEvaluator
 from app.services.auth.dependencies import get_current_user
 from app.services.llm.claude import ClaudeService
 from database.sqlite import get_connection
+from langchain_core.messages import HumanMessage
+
 
 router = APIRouter(prefix="/query", tags=["Query"])
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def generate_new_session_id() -> str:
     """Generate a unique, readable session identifier."""
@@ -55,30 +55,8 @@ def _build_graph_input(question: str, user_id: str) -> dict:
         "user_id": user_id,
     }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Two-phase streaming
-#
-# Why two phases?
-#
-#   ClaudeService uses the raw Anthropic SDK (not a LangChain chat model),
-#   so LangGraph's astream_events / on_chat_model_stream events never fire.
-#
-#   Instead we:
-#     Phase 1 — Run the full graph synchronously (retrieve → rerank → grade
-#               → build_context → load_memory → generate).  We intercept
-#               the state *before* the final LLM call to get context + memories.
-#     Phase 2 — Call ClaudeService.generate_stream() directly and yield
-#               tokens to the client one by one.
-#
-#   This gives reliable, simple streaming without fighting the framework.
-# ─────────────────────────────────────────────────────────────────────────────
 
-async def _run_retrieval_phase(
-    rag_graph,
-    question: str,
-    user_id: str,
-    thread_id: str,
-) -> dict:
+async def _run_retrieval_phase(rag_graph, question: str,user_id: str,thread_id: str) -> dict:
     """
     Run all graph nodes except the final LLM generation.
 
@@ -87,19 +65,12 @@ async def _run_retrieval_phase(
         - long_term_memories (list[str])  persisted facts about the user
         - chat_history      (list)  previous conversation turns
     """
-    # We run the full graph with generate() included so LangGraph handles
-    # state persistence (checkpointer). The generate() node result is
-    # thrown away — we re-run generation ourselves in streaming mode.
     config = _build_graph_config(thread_id, user_id)
     state = rag_graph.invoke(_build_graph_input(question, user_id), config=config)
     return state
 
 
-async def _stream_answer(
-    llm,
-    question: str,
-    state: dict,
-) -> tuple[str, object]:
+async def _stream_answer(llm, question: str, state: dict) -> tuple[str, object]:
     """
     Async generator: stream the final answer token by token.
 
@@ -112,7 +83,6 @@ async def _stream_answer(
     Returns (via StopAsyncIteration value):
         tuple(full_answer, stream_object) — for post-stream processing
     """
-    from langchain_core.messages import HumanMessage
 
     history_dicts = [
         {
@@ -129,13 +99,13 @@ async def _stream_answer(
         long_term_memories=state.get("long_term_memories") or [],
     )
 
+
 def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None = None) -> dict:
     """Shared invocation logic for both query endpoints."""
     observer = RAGObserver()
     evaluator = RAGEvaluator()
 
     thread_id = session_id or generate_new_session_id()
-
 
     result = rag_graph.invoke(
         {
@@ -167,10 +137,11 @@ def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None
         "evaluation": evaluation,
     }
 
-@router.post(
-    "/stream",
-    summary="Query with token-by-token streaming (SSE)",
-)
+
+
+
+
+@router.post("/stream", summary="Query with token-by-token streaming (SSE)")
 async def query_documents_stream(
     request: QueryRequest,
     rag_graph=Depends(get_rag_graph),
@@ -219,7 +190,6 @@ async def query_documents_stream(
                     full_answer += token
                     yield f'data: {json.dumps({"type": "token", "content": token})}\n\n'
 
-            # ── Phase 3: send final metadata ──────────────────────────────────
             metrics = observer.finish()
             evaluation = evaluator.evaluate(
                 question=request.question,
@@ -267,7 +237,6 @@ async def query_documents(
 
     return _invoke_graph(rag_graph, request.question, current_user.id, request.session_id)
 
-
 @router.post("/hybrid", summary="Query (Hybrid: Dense + BM25 + RRF)")
 async def query_documents_hybrid(
     request: QueryRequest,
@@ -286,7 +255,6 @@ async def query_documents_hybrid(
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     return _invoke_graph(rag_graph, request.question, current_user.id, request.session_id)
-
 
 @router.get("/conversations", summary="List user conversations")
 async def list_conversations(current_user: UserInDB = Depends(get_current_user)):
@@ -317,14 +285,8 @@ async def list_conversations(current_user: UserInDB = Depends(get_current_user))
     finally:
         conn.close()
 
-@router.get(
-    "/conversations/{session_id}",
-    summary="Get conversation chat history",
-)
-async def get_conversation_history(
-    session_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-):
+@router.get("/conversations/{session_id}",summary="Get conversation chat history")
+async def get_conversation_history(session_id: str, current_user: UserInDB = Depends(get_current_user),):
     """
     Fetch the full chat history for a specific session from the SQLite checkpointer.
     """
@@ -340,7 +302,6 @@ async def get_conversation_history(
 
         messages = []
         for m in raw_messages:
-            # LangGraph may deserialize messages as plain dicts or as message objects
             if isinstance(m, dict):
                 messages.append({"role": m.get("type", m.get("role", "unknown")), "content": m.get("content", "")})
             else:

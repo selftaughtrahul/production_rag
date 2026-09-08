@@ -34,7 +34,6 @@ def _save_upload(file: UploadFile, content: bytes) -> str:
         tmp.write(content)
         return tmp.name
 
-
 @router.get("/tasks/{task_id}", summary="Check background task status")
 async def get_task_status(task_id: str):
     """Get the status and result of a background ingestion task."""
@@ -48,8 +47,6 @@ async def get_task_status(task_id: str):
         response["error"] = str(task_result.info)
 
     return response
-
-
 
 @router.post("/ingest", summary="Upload and ingest a document")
 async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
@@ -110,11 +107,6 @@ async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = 
         "ingestion": result,
     }
 
-
-# ─────────────────────────────────────────────────────────────
-# GET /documents
-# ─────────────────────────────────────────────────────────────
-
 @router.get("/documents", response_model=List[DocumentResponse], summary="List user documents")
 async def list_documents( current_user: UserInDB = Depends(get_current_user), db=Depends(get_db)):
     """List all documents uploaded by the authenticated user."""
@@ -124,8 +116,6 @@ async def list_documents( current_user: UserInDB = Depends(get_current_user), db
         (current_user.id,),
     )
     return [dict(row) for row in cursor.fetchall()]
-
-
 
 @router.delete("/documents/{document_id}", summary="Delete a document")
 async def delete_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
