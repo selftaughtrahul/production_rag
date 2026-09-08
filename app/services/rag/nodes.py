@@ -40,21 +40,17 @@ class RAGNodes:
     # ──────────────────────────────────────────────────────────────────
 
     def retrieve(self, state: RAGState) -> dict:
-        """
-        Fetch the top-N candidate chunks from the vector store.
-
-        Scoped to the authenticated user via metadata_filter so that
-        users never see each other's documents.
-        """
         observer = state.get("observer")
+
         if observer:
             observer.on_retrieval_start()
 
         question = state["question"]
         query = state.get("rewritten_question") or question
-        retry_count = state.get("retry_count", 0)
 
+        retry_count = state.get("retry_count", 0)
         user_id = state.get("user_id")
+
         metadata_filter = {"user_id": user_id} if user_id else None
 
         documents = self.retriever.retrieve(
@@ -63,7 +59,12 @@ class RAGNodes:
             metadata_filter=metadata_filter,
         )
 
-        logger.info("Retrieved %d chunks (user=%s, attempt=%d)", len(documents), user_id, retry_count + 1)
+        logger.info(
+            "Retrieved %d chunks (user=%s, attempt=%d)",
+            len(documents),
+            user_id,
+            retry_count + 1,
+        )
 
         if observer:
             observer.on_retrieval_end(document_count=len(documents))
@@ -72,7 +73,7 @@ class RAGNodes:
             "documents": documents,
             "retry_count": retry_count + 1,
         }
-
+    
     # ──────────────────────────────────────────────────────────────────
     # Node 2 — Rerank
     # ──────────────────────────────────────────────────────────────────
