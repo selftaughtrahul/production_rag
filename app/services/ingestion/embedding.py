@@ -35,12 +35,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
 class HuggingFaceEmbeddingProvider(EmbeddingProvider):
     def __init__(self, model: str = "sentence-transformers/all-MiniLM-L6-v2", *, device: str | None = None):
-        import torch
         from sentence_transformers import SentenceTransformer
-        if device is None:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        elif device == "cuda" and not torch.cuda.is_available():
-            device = "cpu"
+
+        from app.core.device import resolve_torch_device
+
+        device = resolve_torch_device(device)
         self.model_name = model
         self.device = device
         self.model = SentenceTransformer(model, device=device)

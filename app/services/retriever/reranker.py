@@ -55,7 +55,7 @@ class CrossEncoderReranker(Reranker):
             return []
 
         pairs = [(query, doc.text) for doc in documents]
-        scores = self.model.predict(pairs)
+        scores = self.model.predict(pairs, batch_size=32, show_progress_bar=False)
 
         ranked = sorted(
             zip(documents, scores),

@@ -9,6 +9,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from sentence_transformers import CrossEncoder
 
 from app.core.config import Settings
+from app.core.device import resolve_torch_device
 from app.guardrails.factory import (
     build_input_guardrails,
     build_output_guardrails,
@@ -70,8 +71,9 @@ def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddi
 
 @lru_cache(maxsize=1)
 def get_cross_encoder_model(model: str, device: str | None = None) -> CrossEncoder:
-    print(f"Loading cross encoder model: {model}...")
-    return CrossEncoder(model, device=device)
+    resolved = resolve_torch_device(device)
+    print(f"Loading cross encoder model: {model} on {resolved}...")
+    return CrossEncoder(model, device=resolved)
 
 
 @lru_cache(maxsize=1)
@@ -122,7 +124,7 @@ def _build_common_rag_graph(retriever, checkpointer: AsyncSqliteSaver):
 
     reranker_model = get_cross_encoder_model(
         model=settings.reranker_model,
-        device=settings.embedding_device,
+        device=resolve_torch_device(settings.embedding_device),
     )
     reranker = CrossEncoderReranker(model=reranker_model)
 
