@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies import get_master_agent_graph
+from app.api.session_access import ensure_session_owner
 from app.models.schemas import AgentQueryRequest, AgentQueryResponse, UserInDB
 from app.services.auth.dependencies import get_current_user
 
@@ -40,6 +41,7 @@ async def run_multi_agent(
             detail="Query cannot be empty",
         )
 
+    ensure_session_owner(request.session_id, current_user.id)
     thread_id = request.session_id or _generate_session_id()
 
     input_state = {
@@ -89,5 +91,5 @@ async def run_multi_agent(
         logger.error(f"Multi-agent execution failure: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Agent execution encountered an error: {str(exc)}",
+            detail="Agent execution encountered an error.",
         )

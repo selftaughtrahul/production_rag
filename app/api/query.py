@@ -1,22 +1,22 @@
+"""Query API — RAG invoke, streaming, and conversation history."""
 
-""" 
-
-
-"""
 import json
-import sqlite3
+import logging
 import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from app.api.dependencies import get_rag_graph, get_hybrid_rag_graph, get_llm
+from app.api.dependencies import get_hybrid_rag_graph, get_llm, get_rag_graph
+from app.api.session_access import ensure_session_owner, list_owned_thread_ids
+from app.memory.persist import persist_from_turn
 from app.models.schemas import QueryRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
 from app.services.llm.claude import ClaudeService
-from database.sqlite import get_connection
-from langchain_core.messages import HumanMessage
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/query", tags=["Query"])
@@ -46,16 +46,17 @@ def _build_graph_config(thread_id: str, user_id: str) -> dict:
     }
 
 
-def _build_graph_input(question: str, user_id: str) -> dict:
+def _build_graph_input(question: str, user_id: str, skip_generate: bool = False) -> dict:
     """Initial state passed into the RAG graph."""
     return {
         "question": question,
         "retry_count": 0,
         "user_id": user_id,
+        "skip_generate": skip_generate,
     }
 
 
-async def _run_retrieval_phase(rag_graph, question: str,user_id: str,thread_id: str) -> dict:
+async def _run_retrieval_phase(rag_graph, question: str, user_id: str, thread_id: str) -> dict:
     """
     Run all graph nodes except the final LLM generation.
 
@@ -65,8 +66,10 @@ async def _run_retrieval_phase(rag_graph, question: str,user_id: str,thread_id: 
         - chat_history      (list)  previous conversation turns
     """
     config = _build_graph_config(thread_id, user_id)
-    state = rag_graph.invoke(_build_graph_input(question, user_id), config=config)
-    return state
+    return await rag_graph.ainvoke(
+        _build_graph_input(question, user_id, skip_generate=True),
+        config=config,
+    )
 
 
 async def _stream_answer(llm, question: str, state: dict) -> tuple[str, object]:
@@ -99,32 +102,21 @@ async def _stream_answer(llm, question: str, state: dict) -> tuple[str, object]:
     )
 
 
-def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None = None) -> dict:
+async def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None = None) -> dict:
     """Shared invocation logic for both query endpoints."""
- 
+    ensure_session_owner(session_id, user_id)
     thread_id = session_id or generate_new_session_id()
 
-    result = rag_graph.invoke(
-        {
-            "question": question,
-            "retry_count": 0,
-            "user_id": user_id,
-        },
-        config={
-            "configurable": {"thread_id": thread_id},
-            "run_name": question,
-            "tags": ["rag", "corrective-rag"],
-            "metadata": {"source": "fastapi", "user_id": user_id, "session_id": thread_id},
-        },
+    result = await rag_graph.ainvoke(
+        _build_graph_input(question, user_id),
+        config=_build_graph_config(thread_id, user_id),
     )
-
 
     return {
         "success": True,
         "session_id": thread_id,
         "question": question,
         "answer": result.get("answer", ""),
-
     }
 
 
@@ -147,8 +139,9 @@ async def query_documents_stream(request: QueryRequest,rag_graph=Depends(get_rag
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
+    ensure_session_owner(request.session_id, current_user.id)
     thread_id = request.session_id or generate_new_session_id()
-
+    config = _build_graph_config(thread_id, current_user.id)
 
     async def event_generator():
         full_answer = ""
@@ -172,18 +165,30 @@ async def query_documents_stream(request: QueryRequest,rag_graph=Depends(get_rag
                     full_answer += token
                     yield f'data: {json.dumps({"type": "token", "content": token})}\n\n'
 
-         
+            await rag_graph.aupdate_state(
+                config,
+                {
+                    "question": request.question,
+                    "answer": full_answer,
+                    "chat_history": [
+                        HumanMessage(content=request.question),
+                        AIMessage(content=full_answer),
+                    ],
+                },
+            )
+            persist_from_turn(llm, current_user.id, request.question, full_answer)
+
             done_event = {
                 "type": "done",
                 "session_id": thread_id,
                 "question": request.question,
                 "answer": full_answer,
-               
             }
             yield f"data: {json.dumps(done_event)}\n\n"
 
         except Exception as exc:
-            error_event = {"type": "error", "error": str(exc)}
+            logger.error("Streaming query failed: %s", exc, exc_info=True)
+            error_event = {"type": "error", "error": "Query could not be completed."}
             yield f"data: {json.dumps(error_event)}\n\n"
 
     return StreamingResponse(
@@ -206,7 +211,7 @@ async def query_documents(request: QueryRequest,rag_graph=Depends(get_rag_graph)
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    return _invoke_graph(rag_graph, request.question, current_user.id, request.session_id)
+    return await _invoke_graph(rag_graph, request.question, current_user.id, request.session_id)
 
 @router.post("/hybrid", summary="Query (Hybrid: Dense + BM25 + RRF)")
 async def query_documents_hybrid(request: QueryRequest,rag_graph=Depends(get_hybrid_rag_graph),current_user: UserInDB = Depends(get_current_user)):
@@ -221,7 +226,7 @@ async def query_documents_hybrid(request: QueryRequest,rag_graph=Depends(get_hyb
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    return _invoke_graph(rag_graph, request.question, current_user.id, request.session_id)
+    return await _invoke_graph(rag_graph, request.question, current_user.id, request.session_id)
 
 @router.get("/conversations", summary="List user conversations")
 async def list_conversations(current_user: UserInDB = Depends(get_current_user)):
@@ -229,34 +234,15 @@ async def list_conversations(current_user: UserInDB = Depends(get_current_user))
     Fetch all unique session IDs associated with the current user
     by querying the langgraph checkpointer database.
     """
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute("SELECT thread_id, metadata FROM checkpoints GROUP BY thread_id")
-        rows = cursor.fetchall()
-
-        session_ids = set()
-        for thread_id, metadata in rows:
-            try:
-                if metadata:
-                    meta_dict = json.loads(metadata.decode("utf-8"))
-                    if meta_dict.get("user_id") == current_user.id:
-                        session_ids.add(thread_id)
-            except Exception:
-                continue
-
-        return {"success": True, "sessions": list(session_ids)}
-    except sqlite3.OperationalError:
-        return {"success": True, "sessions": []}
-    finally:
-        conn.close()
+    return {"success": True, "sessions": list_owned_thread_ids(current_user.id)}
 
 @router.get("/conversations/{session_id}",summary="Get conversation chat history")
 async def get_conversation_history(session_id: str, current_user: UserInDB = Depends(get_current_user),):
     """
     Fetch the full chat history for a specific session from the SQLite checkpointer.
     """
+    ensure_session_owner(session_id, current_user.id)
+
     config = {"configurable": {"thread_id": session_id}}
 
     with SqliteSaver.from_conn_string("rag_database.db") as cp:
