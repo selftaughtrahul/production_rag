@@ -1,7 +1,7 @@
 """
 """
 
-from app.guardrails.model import GuardrailResult
+from app.guardrails.base import GuardrailResult
 
 class InputGuardrailService:
 

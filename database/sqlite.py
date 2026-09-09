@@ -11,8 +11,15 @@ from __future__ import annotations
 
 from typing import Generator
 import sqlite3
+from sqlalchemy import create_engine
 
 from app.core.config import Settings
+
+DB_FILE_PATH = "rag_database.db"
+engine = create_engine(
+    f"sqlite:///{DB_FILE_PATH}",
+    connect_args={"check_same_thread": False},
+)
 
 
 def get_connection() -> sqlite3.Connection:
@@ -21,7 +28,7 @@ def get_connection() -> sqlite3.Connection:
     """
 
     conn = sqlite3.connect(
-        "rag_database.db",
+        DB_FILE_PATH,
         check_same_thread=False,
     )
 

@@ -72,3 +72,22 @@ class DocumentResponse(BaseModel):
     user_id: str
     file_name: str
     created_at: datetime
+
+
+# ─────────────────────────────────────────────────────────────
+# Multi-Agent schemas
+# ─────────────────────────────────────────────────────────────
+
+class AgentQueryRequest(BaseModel):
+    query: str
+    session_id: str | None = None
+
+
+class AgentQueryResponse(BaseModel):
+    success: bool = True
+    session_id: str
+    query: str
+    final_answer: str
+    iterations: int = 0
+    agent_trajectory: list[dict[str, Any]] = []
+    guardrail_metadata: dict[str, Any] = {}

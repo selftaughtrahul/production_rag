@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.query import router as query_router
+from app.api.agent import router as agent_router
 from database.sqlite import init_db
 
 
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RAG API",
-    description="Document ingestion and retrieval API with user authentication",
+    description="Document ingestion and retrieval API with multi-agent orchestration and guardrails",
     version="2.0.0",
     lifespan=lifespan,
 )
@@ -29,3 +30,5 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(query_router)
 app.include_router(documents_router)
+app.include_router(agent_router)
+

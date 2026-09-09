@@ -29,7 +29,7 @@ from app.tools.registry import ToolRegistry, build_default_tool_registry
 from database.sqlite import engine as sqlite_engine
 from database.sqlite import get_connection
 
-from app.agent.engine import SingleAgentOrchestrator
+from app.agent.multi_agent.master_graph import build_master_agent_graph
 
 # Initialize SQLite checkpointer for conversational memory globally
 _db_conn = get_connection()
@@ -184,16 +184,31 @@ def get_tool_registry(
     return _tool_registry_instance
 
 
+@lru_cache(maxsize=1)
+def get_master_agent_graph():
+    """
+    Singleton provider for the compiled Master Multi-Agent Graph.
+    Equipped with:
+      - Supervisor-level input & output guardrails
+      - Supervisor-level conversational memory checkpointer (SqliteSaver)
+      - Long-term memory extraction & SQLite persistence
+      - Specialized sub-agents (RAG, SQL, Web, General)
+    """
+    llm = get_llm()
+    retriever = get_hybrid_retriever()
+    tool_registry = get_tool_registry(retriever=retriever)
+    compiled_rag = get_hybrid_rag_graph()
+    input_guardrails = build_input_guardrails()
+    output_guardrails = build_output_guardrails()
 
-# Add to app/api/dependencies.py
-
-
-def get_agent_orchestrator(
-    llm: ClaudeService = Depends(get_llm),
-    tool_registry: ToolRegistry = Depends(get_tool_registry),
-) -> SingleAgentOrchestrator:
-    return SingleAgentOrchestrator(
-        llm_service=llm,
+    return build_master_agent_graph(
+        llm=llm,
         tool_registry=tool_registry,
-        max_iterations=5
+        compiled_rag_graph=compiled_rag,
+        input_guardrails=input_guardrails,
+        output_guardrails=output_guardrails,
+        checkpointer=checkpointer,
     )
+
+
+

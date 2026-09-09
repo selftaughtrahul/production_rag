@@ -254,3 +254,46 @@ Guidelines:
         )
 
         return rewritten_question
+
+    async def agenerate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_tokens: int = 1024,
+    ) -> str:
+        """Asynchronously generate a text response from Claude."""
+        self._check_client()
+        messages = [{"role": "user", "content": prompt}]
+        kwargs = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
+
+        response = await self.async_client.messages.create(**kwargs)
+        return response.content[0].text.strip()
+
+    async def agenerate_structured(
+        self,
+        prompt: str,
+        system_prompt: str,
+        response_model: type,
+        max_tokens: int = 1024,
+    ):
+        """Asynchronously generate structured output conforming to a Pydantic model."""
+        import json
+        import re
+
+        schema_json = json.dumps(response_model.model_json_schema(), indent=2)
+        full_system = f"{system_prompt}\n\nIMPORTANT: Output strictly valid JSON conforming to this JSON Schema:\n{schema_json}\nReturn ONLY the JSON object, with no markdown code blocks or surrounding commentary."
+
+        raw_response = await self.agenerate(
+            prompt=prompt,
+            system_prompt=full_system,
+            max_tokens=max_tokens,
+        )
+
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_response.strip(), flags=re.DOTALL)
+        return response_model.model_validate_json(cleaned)
