@@ -1,9 +1,11 @@
+import asyncio
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 
+import aiosqlite
 from fastapi import Depends
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from sentence_transformers import CrossEncoder
 
 from app.core.config import Settings
@@ -26,14 +28,29 @@ from app.services.retriever.hybrid import HybridRetriever
 from app.services.retriever.reranker import CrossEncoderReranker
 from app.services.vectorstore.chroma import ChromaVectorStore
 from app.tools.registry import ToolRegistry, build_default_tool_registry
+from database.sqlite import DB_FILE_PATH
 from database.sqlite import engine as sqlite_engine
-from database.sqlite import get_connection
 
 from app.agent.multi_agent.master_graph import build_master_agent_graph
 
-# Initialize SQLite checkpointer for conversational memory globally
-_db_conn = get_connection()
-checkpointer = SqliteSaver(_db_conn)
+_checkpointer: AsyncSqliteSaver | None = None
+_checkpointer_lock = asyncio.Lock()
+_compiled_graphs: dict[str, Any] = {}
+_graph_lock = asyncio.Lock()
+
+
+async def get_checkpointer() -> AsyncSqliteSaver:
+    """Lazy async SQLite checkpointer. SqliteSaver cannot be used with ainvoke."""
+    global _checkpointer
+    if _checkpointer is not None:
+        return _checkpointer
+    async with _checkpointer_lock:
+        if _checkpointer is None:
+            conn = await aiosqlite.connect(DB_FILE_PATH)
+            saver = AsyncSqliteSaver(conn)
+            await saver.setup()
+            _checkpointer = saver
+    return _checkpointer
 
 
 @dataclass(slots=True)
@@ -98,7 +115,7 @@ def build_ingestion_pipeline(source: str) -> IngestionPipeline:
     )
 
 
-def _build_common_rag_graph(retriever):
+def _build_common_rag_graph(retriever, checkpointer: AsyncSqliteSaver):
     """Helper to build a RAG graph with shared components."""
     settings = Settings.from_environment()
     context_builder = ContextBuilder()
@@ -143,24 +160,32 @@ def get_hybrid_retriever() -> HybridRetriever:
     )
 
 
-@lru_cache(maxsize=1)
-def get_rag_graph():
+async def get_rag_graph():
     """Single dense-vector retrieval graph."""
-    components = build_components()
+    if "rag" not in _compiled_graphs:
+        async with _graph_lock:
+            if "rag" not in _compiled_graphs:
+                components = build_components()
+                retriever = DenseRetriever(
+                    embedder=components.embedder,
+                    vector_store=components.vector_store,
+                )
+                checkpointer = await get_checkpointer()
+                _compiled_graphs["rag"] = _build_common_rag_graph(retriever, checkpointer)
+    return _compiled_graphs["rag"]
 
-    retriever = DenseRetriever(
-        embedder=components.embedder,
-        vector_store=components.vector_store,
-    )
 
-    return _build_common_rag_graph(retriever)
-
-
-@lru_cache(maxsize=1)
-def get_hybrid_rag_graph():
+async def get_hybrid_rag_graph():
     """Hybrid retrieval graph: Dense + BM25 → RRF Fusion → Reranker → LLM."""
-    retriever = get_hybrid_retriever()
-    return _build_common_rag_graph(retriever)
+    if "hybrid" not in _compiled_graphs:
+        async with _graph_lock:
+            if "hybrid" not in _compiled_graphs:
+                retriever = get_hybrid_retriever()
+                checkpointer = await get_checkpointer()
+                _compiled_graphs["hybrid"] = _build_common_rag_graph(
+                    retriever, checkpointer
+                )
+    return _compiled_graphs["hybrid"]
 
 
 @lru_cache(maxsize=1)
@@ -184,31 +209,34 @@ def get_tool_registry(
     return _tool_registry_instance
 
 
-@lru_cache(maxsize=1)
-def get_master_agent_graph():
+async def get_master_agent_graph():
     """
     Singleton provider for the compiled Master Multi-Agent Graph.
     Equipped with:
       - Supervisor-level input & output guardrails
-      - Supervisor-level conversational memory checkpointer (SqliteSaver)
+      - Supervisor-level conversational memory checkpointer
       - Long-term memory extraction & SQLite persistence
       - Specialized sub-agents (RAG, SQL, Web, General)
     """
-    llm = get_llm()
-    retriever = get_hybrid_retriever()
-    tool_registry = get_tool_registry(retriever=retriever)
-    compiled_rag = get_hybrid_rag_graph()
-    input_guardrails = build_input_guardrails()
-    output_guardrails = build_output_guardrails()
+    if "agent" in _compiled_graphs:
+        return _compiled_graphs["agent"]
 
-    return build_master_agent_graph(
-        llm=llm,
-        tool_registry=tool_registry,
-        compiled_rag_graph=compiled_rag,
-        input_guardrails=input_guardrails,
-        output_guardrails=output_guardrails,
-        checkpointer=checkpointer,
-    )
+    compiled_rag = await get_hybrid_rag_graph()
+    checkpointer = await get_checkpointer()
+    async with _graph_lock:
+        if "agent" not in _compiled_graphs:
+            llm = get_llm()
+            retriever = get_hybrid_retriever()
+            tool_registry = get_tool_registry(retriever=retriever)
+            _compiled_graphs["agent"] = build_master_agent_graph(
+                llm=llm,
+                tool_registry=tool_registry,
+                compiled_rag_graph=compiled_rag,
+                input_guardrails=build_input_guardrails(),
+                output_guardrails=build_output_guardrails(),
+                checkpointer=checkpointer,
+            )
+    return _compiled_graphs["agent"]
 
 
 
