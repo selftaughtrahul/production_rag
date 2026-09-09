@@ -14,6 +14,10 @@ def _optional_env(name: str) -> str | None:
     return value or None
 
 
+def _env_flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     
@@ -103,8 +107,8 @@ class Settings:
             bm25_top_k=int(os.getenv("BM25_TOP_K", "20")),
             fusion_top_k=int(os.getenv("FUSION_TOP_K", "20")),
             rerank_top_k=int(os.getenv("RERANK_TOP_K", "5")),
-            IS_ASYNC=bool(os.get('IS_ASYNC', 'False')),
-            LOG_DIR=str(os.get('LOG_DIR', 'False')),
+            IS_ASYNC=_env_flag("IS_ASYNC", "false"),
+            LOG_DIR=os.getenv("LOG_DIR", "logs"),
 
 
 
