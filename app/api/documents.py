@@ -35,16 +35,22 @@ def _save_upload(file: UploadFile, content: bytes) -> str:
         return tmp.name
 
 @router.get("/tasks/{task_id}", summary="Check background task status")
-async def get_task_status(task_id: str):
+async def get_task_status(
+    task_id: str,
+    current_user: UserInDB = Depends(get_current_user),
+):
     """Get the status and result of a background ingestion task."""
     task_result = AsyncResult(task_id, app=ingest_document_task.app)
 
     response = {"task_id": task_id, "status": task_result.status}
 
     if task_result.status == "SUCCESS":
-        response["result"] = task_result.result
+        result = task_result.result or {}
+        if isinstance(result, dict) and result.get("user_id") not in {None, current_user.id}:
+            raise HTTPException(status_code=404, detail="Task not found")
+        response["result"] = result
     elif task_result.status == "FAILURE":
-        response["error"] = str(task_result.info)
+        response["error"] = "Ingestion failed."
 
     return response
 

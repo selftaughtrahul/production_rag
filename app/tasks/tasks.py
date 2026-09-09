@@ -1,7 +1,27 @@
 from app.tasks.celery_app import celery_app
 
+
 @celery_app.task(name="app.tasks.ingest_document_task")
-def ingest_document_task(file_path: str) -> dict:
-    """Celery background task to ingest a document."""
+def ingest_document_task(source: str, document_id: str, filename: str, user_id: str) -> dict:
+    """Celery background task to ingest a document with tenant metadata."""
     from app.api.dependencies import build_ingestion_pipeline
-    return build_ingestion_pipeline(source=file_path).ingest(source=file_path)
+    from database.sqlite import get_connection
+
+    result = build_ingestion_pipeline(source=source).ingest(
+        source=source,
+        document_id=document_id,
+        filename=filename,
+        user_id=user_id,
+    )
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO documents (id, user_id, file_name) VALUES (?, ?, ?)",
+            (document_id, user_id, filename),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return result
