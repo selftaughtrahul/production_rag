@@ -15,6 +15,8 @@ def init_session_state():
         st.session_state.current_session_id = None
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "chat_mode" not in st.session_state:
+        st.session_state.chat_mode = "basic"
 
 def main():
     init_session_state()

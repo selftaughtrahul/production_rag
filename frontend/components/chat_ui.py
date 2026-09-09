@@ -21,7 +21,11 @@ def render_chat_ui(api_client):
             full_response = ""
             
             # Stream the response from the API
-            for chunk in api_client.query_stream(prompt, st.session_state.current_session_id):
+            for chunk in api_client.query_stream(
+                prompt,
+                st.session_state.current_session_id,
+                st.session_state.chat_mode,
+            ):
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
                 

@@ -72,14 +72,14 @@ class APIClient:
         return []
 
     def list_conversations(self):
-        response = requests.get(f"{BASE_URL}/query/conversations", headers=self.get_headers())
+        response = requests.get(f"{BASE_URL}/chat/conversations", headers=self.get_headers())
         self._check_auth(response)
         if response.status_code == 200:
             return response.json().get("sessions", [])
         return []
 
     def get_conversation(self, session_id):
-        response = requests.get(f"{BASE_URL}/query/conversations/{session_id}", headers=self.get_headers())
+        response = requests.get(f"{BASE_URL}/chat/conversations/{session_id}", headers=self.get_headers())
         self._check_auth(response)
         if response.status_code == 200:
             return [
@@ -91,10 +91,10 @@ class APIClient:
             ]
         return []
 
-    def query_stream(self, question: str, session_id: str = None):
-        """Yields text chunks as they arrive from the SSE endpoint."""
-        url = f"{BASE_URL}/query/stream"
-        payload = {"question": question}
+    def query_stream(self, question: str, session_id: str = None, mode: str = "basic"):
+        """Yields text chunks as they arrive from the single chat endpoint."""
+        url = f"{BASE_URL}/chat/"
+        payload = {"question": question, "mode": mode}
         if session_id:
             payload["session_id"] = session_id
         

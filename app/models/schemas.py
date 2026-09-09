@@ -4,9 +4,11 @@ Pydantic request / response schemas for the RAG API.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, field_validator
+
+ChatMode = Literal["basic", "hybrid", "agent"]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -58,9 +60,10 @@ class UserInDB(BaseModel):
 # Query schema
 # ─────────────────────────────────────────────────────────────
 
-class QueryRequest(BaseModel):
+class ChatRequest(BaseModel):
     question: str
     session_id: str | None = None
+    mode: ChatMode = "basic"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -80,16 +83,12 @@ class DocumentResponse(BaseModel):
 # Multi-Agent schemas
 # ─────────────────────────────────────────────────────────────
 
-class AgentQueryRequest(BaseModel):
-    query: str
-    session_id: str | None = None
-
-
-class AgentQueryResponse(BaseModel):
+class ChatResponse(BaseModel):
     success: bool = True
     session_id: str
-    query: str
-    final_answer: str
+    question: str
+    answer: str
+    mode: ChatMode = "basic"
     iterations: int = 0
     agent_trajectory: list[dict[str, Any]] = []
     guardrail_metadata: dict[str, Any] = {}
