@@ -2,12 +2,11 @@
 Collection of RAG pipeline node implementations.
 """
 
-from anthropic.types import browser_get_page_text_config_param
 from langchain_core.messages import HumanMessage, AIMessage
 
 from app.core.config import Settings
 from app.core.exceptions import handle_node_error
-from app.memory.extractor import MemoryExtractor
+from app.memory.persist import persist_from_turn
 from app.memory.service import MemoryService
 from database.sqlite import get_connection
 from .state import RAGState
@@ -55,12 +54,16 @@ class RAGNodes:
             query = state.get("rewritten_question") or question
 
             user_id = state.get("user_id")
+            if not user_id:
+                return {
+                    "documents": [],
+                    "has_error": False,
+                    "error": None,
+                    "error_node": None,
+                    "error_type": None,
+                }
 
-            metadata_filter = (
-                {"user_id": user_id}
-                if user_id
-                else None
-            )
+            metadata_filter = {"user_id": user_id}
 
             documents = self.retriever.retrieve(
                 query=query,
@@ -226,6 +229,9 @@ class RAGNodes:
         """
  
 
+        if state.get("skip_generate"):
+            return {}
+
         question = state["question"]
         context = state.get("context", "")
 
@@ -258,91 +264,48 @@ class RAGNodes:
 
     def save_memory(self, state: RAGState) -> dict:
         """Extract durable facts from this turn and persist them."""
-        user_id = state.get("user_id")
-        question = state.get("question", "")
-        answer = state.get("answer", "")
-
-        if not user_id or not question or not answer:
+        if state.get("skip_memory_persist") or state.get("skip_generate"):
             return {}
 
-        conversation = f"User: {question}\nAssistant: {answer}"
-        conn = get_connection()
-        try:
-            memory_service = MemoryService(conn)
-            existing = memory_service.get_user_memories(user_id=user_id, limit=20)
-            decision = MemoryExtractor(self.llm).decide(
-                user_id=user_id,
-                conversation=conversation,
-                existing_memories=existing,
-            )
-
-            if decision.action == "ADD" and decision.memory:
-                memory_service.create_memory(
-                    user_id=user_id,
-                    memory=decision.memory,
-                    memory_type=decision.memory_type or "general",
-                    importance=decision.importance,
-                )
-            elif decision.action == "UPDATE" and decision.memory and decision.memory_id:
-                updated = memory_service.update_memory(
-                    memory_id=decision.memory_id,
-                    memory=decision.memory,
-                    memory_type=decision.memory_type or "general",
-                    importance=decision.importance,
-                    user_id=user_id,
-                )
-               
-            else:
-                print("no change in long-term memory (action=%s)", decision.action)
-        except Exception:
-            print("Failed to persist long-term memory for user=%s", user_id)
-        finally:
-            conn.close()
-
+        persist_from_turn(
+            self.llm,
+            state.get("user_id"),
+            state.get("question", ""),
+            state.get("answer", ""),
+        )
         return {}
 
     def error_handler(self, state: RAGState):
         """Handle errors that occur in any RAG pipeline node."""
-
-        error_node = state.get("error_node")
-        error = state.get("error")
-
-
-        return {"has_error": True}
+        return {
+            "has_error": True,
+            "answer": "I cannot complete your request right now.",
+        }
 
     async def validate_input(self, state: RAGState):
-
         if self.input_guardrails is None:
-            return state
+            return {"input_guardrail_passed": True}
 
-        result = await self.input_guardrails.validate(
-            state["query"]
-        )
-
+        result = await self.input_guardrails.validate(state["question"])
         return {
-            **state,
             "input_guardrail_passed": result.passed,
             "input_guardrail_reason": result.reason,
             "guardrail_metadata": result.metadata,
-
         }
-    
+
     async def validate_output(self, state: RAGState):
+        if state.get("skip_generate"):
+            return {"output_guardrail_passed": True}
 
         if self.output_guardrails is None:
-            return {
-                **state,
-                "output_guardrail_passed": True,
-            }
+            return {"output_guardrail_passed": True}
 
         result = await self.output_guardrails.validate(
-            query=state["query"],
-            response=state["answer"],
+            query=state["question"],
+            response=state.get("answer", ""),
             context=state.get("context"),
         )
-
-        return {
-            **state,
+        update = {
             "output_guardrail_passed": result.passed,
             "output_guardrail_reason": result.reason,
             "guardrail_metadata": {
@@ -350,3 +313,6 @@ class RAGNodes:
                 **result.metadata,
             },
         }
+        if not result.passed:
+            update["output_retry_count"] = state.get("output_retry_count", 0) + 1
+        return update

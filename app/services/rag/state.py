@@ -12,9 +12,12 @@ class RAGState(TypedDict, total=False):
     answer: str                 # final answer from LLM
     documents_relevant: bool    # grading result: True → generate, False → rewrite
     retry_count: int            # number of retrieve-rewrite loops so far
+    output_retry_count: int     # number of output-guardrail retries
     user_id: str                # authenticated user ID — used for metadata filtering
     chat_history: Annotated[list[BaseMessage], add_messages]  # HumanMessage / AIMessage objects
     long_term_memories: list[Any] # retrieved facts about the user
+    skip_generate: bool         # retrieval-only invoke (streaming path)
+    skip_memory_persist: bool   # skip save_memory when nested under the master agent
 
     error: str | None           # error message if any
     error_node: str | None      # node where error occurred

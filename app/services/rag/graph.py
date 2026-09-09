@@ -85,8 +85,6 @@ def build_rag_graph(retriever, reranker, context_builder, llm,input_guardrails=N
    
     graph.add_edge("rewrite", "retrieve")
     graph.add_edge("build_context", "generate")
-    graph.add_edge("generate", "save_memory")
-
     graph.add_edge("generate", "validate_output")
     graph.add_conditional_edges(
         "validate_output",
