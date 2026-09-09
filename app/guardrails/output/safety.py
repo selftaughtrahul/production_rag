@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from app.guardrails.base import BaseOutputGuardrail, GuardrailResult
-from app.guardrails.provider.llama_guard import LlamaGuardProvider
+
+if TYPE_CHECKING:
+    from app.guardrails.provider.llama_guard import LlamaGuardProvider
 
 class OutputSafetyGuardrail(BaseOutputGuardrail):
     def __init__(self, provider: LlamaGuardProvider):

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.guardrails.base import BaseInputGuardrail, GuardrailResult
-from app.guardrails.provider.presidio import PresidioProvider
+
+if TYPE_CHECKING:
+    from app.guardrails.provider.presidio import PresidioProvider
 
 class PresidioPIIGuardrail(BaseInputGuardrail):
     def __init__(self, provider: PresidioProvider):
