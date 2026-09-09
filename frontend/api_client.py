@@ -4,9 +4,13 @@ import streamlit as st
 
 BASE_URL = "http://localhost:8000"
 
+_CHAT_ROLES = {"human": "user", "ai": "assistant", "user": "user", "assistant": "assistant"}
+
+
 class APIClient:
     def __init__(self):
         self.token = None
+        self.last_session_id = None
 
     def set_token(self, token: str):
         self.token = token
@@ -53,7 +57,7 @@ class APIClient:
     def upload_document(self, file_bytes, filename):
         files = {"file": (filename, file_bytes)}
         response = requests.post(
-            f"{BASE_URL}/documents/",
+            f"{BASE_URL}/ingest",
             headers=self.get_headers(),
             files=files
         )
@@ -61,7 +65,7 @@ class APIClient:
         return response.status_code == 200, response.json() if response.status_code == 200 else response.text
 
     def list_documents(self):
-        response = requests.get(f"{BASE_URL}/documents/", headers=self.get_headers())
+        response = requests.get(f"{BASE_URL}/documents", headers=self.get_headers())
         self._check_auth(response)
         if response.status_code == 200:
             return response.json()
@@ -78,7 +82,13 @@ class APIClient:
         response = requests.get(f"{BASE_URL}/query/conversations/{session_id}", headers=self.get_headers())
         self._check_auth(response)
         if response.status_code == 200:
-            return response.json().get("messages", [])
+            return [
+                {
+                    "role": _CHAT_ROLES.get(m.get("role", ""), m.get("role", "assistant")),
+                    "content": m.get("content", ""),
+                }
+                for m in response.json().get("messages", [])
+            ]
         return []
 
     def query_stream(self, question: str, session_id: str = None):
@@ -107,6 +117,8 @@ class APIClient:
                         event = json.loads(data_str)
                         if event.get("type") == "token":
                             yield event.get("content", "")
+                        elif event.get("type") == "done":
+                            self.last_session_id = event.get("session_id")
                         elif event.get("type") == "error":
                             yield f"\n\nError: {event.get('error')}"
                     except json.JSONDecodeError:

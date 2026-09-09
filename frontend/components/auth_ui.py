@@ -7,7 +7,7 @@ def render_auth_ui(api_client):
     
     with tab1:
         st.header("Login")
-        username = st.text_input("Username", key="login_username")
+        username = st.text_input("Email", key="login_username")
         password = st.text_input("Password", type="password", key="login_password")
         if st.button("Login"):
             success, msg = api_client.login(username, password)

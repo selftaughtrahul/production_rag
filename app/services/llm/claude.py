@@ -243,16 +243,6 @@ Guidelines:
             chat_history=chat_history,
         )
 
-        print(
-            "Original question:",
-            question,
-        )
-
-        print(
-            "Rewritten question:",
-            rewritten_question,
-        )
-
         return rewritten_question
 
     async def agenerate(

@@ -4,6 +4,8 @@ Pydantic request / response schemas for the RAG API.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, EmailStr, field_validator
 
 

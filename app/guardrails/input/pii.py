@@ -16,3 +16,4 @@ class PresidioPIIGuardrail(BaseInputGuardrail):
                 action="anonymize",
                 metadata={"anonymized_text": res["anonymized_text"]}
             )
+        return GuardrailResult(passed=True, action="allow")

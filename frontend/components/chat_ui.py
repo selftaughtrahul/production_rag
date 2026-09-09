@@ -26,6 +26,9 @@ def render_chat_ui(api_client):
                 message_placeholder.markdown(full_response + "▌")
                 
             message_placeholder.markdown(full_response)
-            
+
+        if api_client.last_session_id:
+            st.session_state.current_session_id = api_client.last_session_id
+
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": full_response})
