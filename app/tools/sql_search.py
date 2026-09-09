@@ -8,6 +8,34 @@ from app.tools.base import BaseAgentTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
+DENIED_TABLES = {
+    "users",
+    "user_memories",
+    "checkpoints",
+    "checkpoint_writes",
+    "checkpoint_blobs",
+    "writes",
+    "sqlite_master",
+    "sqlite_sequence",
+}
+_TABLE_REF = re.compile(
+    r'\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+["\'`]?(\w+)',
+    re.IGNORECASE,
+)
+_BLOCKED_OPS = [
+    r"\bINSERT\b", r"\bUPDATE\b", r"\bDELETE\b", r"\bDROP\b",
+    r"\bALTER\b", r"\bTRUNCATE\b", r"\bCREATE\b", r"\bGRANT\b", r"\bREVOKE\b",
+    r"\bATTACH\b", r"\bPRAGMA\b", r"\bVACUUM\b", r"\bREINDEX\b",
+]
+
+
+def _strip_sql_comments(sql_statement: str) -> str:
+    return re.sub(r"--.*?\n|/\*.*?\*/", "", sql_statement, flags=re.DOTALL).strip()
+
+
+def _referenced_tables(sql_statement: str) -> set[str]:
+    return {match.group(1).lower() for match in _TABLE_REF.finditer(sql_statement)}
+
 
 class SQLQueryInput(BaseModel):
     query: str = Field(
@@ -35,12 +63,10 @@ class SQLQueryTool(BaseAgentTool):
 
     def _is_read_only(self, sql_statement: str) -> bool:
         """Strict validation to block destructive/write queries."""
-        cleaned = re.sub(r"--.*?\n|/\*.*?\*/", "", sql_statement, flags=re.DOTALL).strip()
-        blocked_keywords = [
-            r"\bINSERT\b", r"\bUPDATE\b", r"\bDELETE\b", r"\bDROP\b",
-            r"\bALTER\b", r"\bTRUNCATE\b", r"\bCREATE\b", r"\bGRANT\b", r"\bREVOKE\b"
-        ]
-        for kw in blocked_keywords:
+        cleaned = _strip_sql_comments(sql_statement).rstrip(";").strip()
+        if ";" in cleaned:
+            return False
+        for kw in _BLOCKED_OPS:
             if re.search(kw, cleaned, re.IGNORECASE):
                 return False
         return cleaned.upper().startswith("SELECT") or cleaned.upper().startswith("WITH")
@@ -48,6 +74,8 @@ class SQLQueryTool(BaseAgentTool):
     def _run(self, query: str) -> str:
         if not self._is_read_only(query):
             return self._format_error("Security Error: Only read-only SELECT queries are allowed.").to_str()
+        if _referenced_tables(query) & DENIED_TABLES:
+            return self._format_error("Security Error: Query targets a restricted table.").to_str()
 
         try:
             with self.db_engine.connect() as conn:
@@ -86,8 +114,12 @@ class SQLSchemaTool(BaseAgentTool):
     def _run(self, include_tables: Optional[List[str]] = None) -> str:
         try:
             inspector = inspect(self.db_engine)
-            all_tables = inspector.get_table_names()
-            target_tables = include_tables if include_tables else all_tables
+            all_tables = [
+                table for table in inspector.get_table_names()
+                if table.lower() not in DENIED_TABLES
+            ]
+            requested = include_tables if include_tables else all_tables
+            target_tables = [table for table in requested if table.lower() not in DENIED_TABLES]
 
             schema_info = []
             for table in target_tables:

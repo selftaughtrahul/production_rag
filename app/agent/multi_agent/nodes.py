@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.agent.multi_agent.state import AgentOutput, SupervisorState
 from app.guardrails.input_service import InputGuardrailService
 from app.guardrails.output_service import OutputGuardrailService
-from app.memory.extractor import MemoryExtractor
+from app.memory.persist import persist_from_turn
 from app.memory.service import MemoryService
 from app.services.llm.claude import ClaudeService
 from app.tools.registry import ToolRegistry
@@ -96,6 +96,7 @@ class RAGSubGraphNode:
                 rag_input = {
                     "question": query,
                     "user_id": user_id,
+                    "skip_memory_persist": True,
                 }
                 rag_result = await self.rag_graph.ainvoke(rag_input)
                 answer = rag_result.get("answer") or rag_result.get("generation", "")
@@ -103,10 +104,12 @@ class RAGSubGraphNode:
             except Exception as e:
                 logger.error(f"[RAG Node] RAG StateGraph invocation failed: {e}", exc_info=True)
 
-        if not answer and self.tool_registry:
+        if not answer and self.tool_registry and user_id:
             doc_tool = self.tool_registry.get_tool("document_search")
             if doc_tool:
-                doc_output = await doc_tool.ainvoke({"query": query, "top_k": 4})
+                doc_output = await doc_tool.ainvoke(
+                    {"query": query, "top_k": 4, "user_id": user_id}
+                )
                 answer = f"Retrieved documents:\n{doc_output}"
 
         if not answer:
@@ -332,43 +335,7 @@ class SaveMemoryNode:
         query = state.get("query", "")
         final_response = state.get("final_response", "")
 
-        if not user_id or not query or not final_response:
-            return {}
-
-        conn = get_connection()
-        try:
-            memory_service = MemoryService(conn)
-            existing = memory_service.get_user_memories(user_id=user_id, limit=20)
-            conversation = f"User: {query}\nAssistant: {final_response}"
-
-            decision = MemoryExtractor(self.llm).decide(
-                user_id=user_id,
-                conversation=conversation,
-                existing_memories=existing,
-            )
-
-            if decision.action == "ADD" and decision.memory:
-                memory_service.create_memory(
-                    user_id=user_id,
-                    memory=decision.memory,
-                    memory_type=decision.memory_type or "general",
-                    importance=decision.importance,
-                )
-                logger.info(f"[SaveMemory] Saved new long-term memory for user '{user_id}': {decision.memory}")
-            elif decision.action == "UPDATE" and decision.memory and decision.memory_id:
-                memory_service.update_memory(
-                    memory_id=decision.memory_id,
-                    memory=decision.memory,
-                    memory_type=decision.memory_type or "general",
-                    importance=decision.importance,
-                    user_id=user_id,
-                )
-                logger.info(f"[SaveMemory] Updated long-term memory ID '{decision.memory_id}'")
-        except Exception as e:
-            logger.warning(f"[SaveMemory] Failed to extract/persist memory: {e}")
-        finally:
-            conn.close()
-
+        persist_from_turn(self.llm, user_id, query, final_response)
         return {}
 
 

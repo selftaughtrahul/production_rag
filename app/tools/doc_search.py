@@ -14,6 +14,9 @@ class DocumentSearchInput(BaseModel):
     top_k: int = Field(
         default=5, ge=1, le=20, description="Number of document chunks to return."
     )
+    user_id: str = Field(
+        ..., description="Authenticated user id; always provided by the orchestrator."
+    )
 
 
 class DocumentSearchTool(BaseAgentTool):
@@ -28,10 +31,18 @@ class DocumentSearchTool(BaseAgentTool):
     class Config:
         arbitrary_types_allowed = True
 
-    def _run(self, query: str, top_k: int = 5) -> str:
+    def _run(self, query: str, top_k: int = 5, user_id: str = "") -> str:
         """Synchronous execution wrapper."""
+        if not user_id:
+            return self._format_error(
+                "Document search requires an authenticated user."
+            ).to_str()
         try:
-            results = self.retriever.retrieve(query=query, top_k=top_k)
+            results = self.retriever.retrieve(
+                query=query,
+                top_k=top_k,
+                metadata_filter={"user_id": user_id},
+            )
             formatted_docs = []
             for i, doc in enumerate(results, 1):
                 source = doc.metadata.get("source", "Unknown")
@@ -56,6 +67,6 @@ class DocumentSearchTool(BaseAgentTool):
             logger.error(f"Error executing DocumentSearchTool: {str(e)}", exc_info=True)
             return self._format_error(f"Failed to execute document search: {str(e)}").to_str()
 
-    async def _arun(self, query: str, top_k: int = 5) -> str:
+    async def _arun(self, query: str, top_k: int = 5, user_id: str = "") -> str:
         """Async execution bridge."""
-        return self._run(query=query, top_k=top_k)
+        return self._run(query=query, top_k=top_k, user_id=user_id)
