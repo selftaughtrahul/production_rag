@@ -124,8 +124,7 @@ def _invoke_graph(rag_graph, question: str, user_id: str, session_id: str | None
         "session_id": thread_id,
         "question": question,
         "answer": result.get("answer", ""),
-        "metrics": metrics,
-        "evaluation": evaluation,
+
     }
 
 
@@ -155,7 +154,6 @@ async def query_documents_stream(request: QueryRequest,rag_graph=Depends(get_rag
         full_answer = ""
 
         try:
-            # ── Phase 1: run full graph (retrieval + context building + memory) ──
             state = await _run_retrieval_phase(
                 rag_graph=rag_graph,
                 question=request.question,
@@ -163,7 +161,6 @@ async def query_documents_stream(request: QueryRequest,rag_graph=Depends(get_rag
                 thread_id=thread_id,
             )
 
-            # ── Phase 2: stream the answer token by token ─────────────────────
             token_stream = await _stream_answer(
                 llm=llm,
                 question=request.question,

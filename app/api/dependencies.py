@@ -1,34 +1,35 @@
-
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Optional
+
+from fastapi import Depends
 from langgraph.checkpoint.sqlite import SqliteSaver
 from sentence_transformers import CrossEncoder
 
 from app.core.config import Settings
+from app.guardrails.factory import (
+    build_input_guardrails,
+    build_output_guardrails,
+)
 from app.services.ingestion.chunker import ChunkerService, LangChainRecursiveStrategy
 from app.services.ingestion.data_cleaning import DataCleaningLibrary
 from app.services.ingestion.document_loader import DocumentLoaderLibrary
 from app.services.ingestion.embedding import EmbeddingService, HuggingFaceEmbeddingProvider
 from app.services.ingestion.pipeline import IngestionPipeline
-
+from app.services.llm.claude import ClaudeService
+from app.services.rag.graph import build_rag_graph
 from app.services.retriever.bm25 import BM25Retriever
 from app.services.retriever.bm25_store import BM25Store
 from app.services.retriever.context import ContextBuilder
 from app.services.retriever.dense import DenseRetriever
 from app.services.retriever.hybrid import HybridRetriever
 from app.services.retriever.reranker import CrossEncoderReranker
-
-from app.services.llm.claude import ClaudeService
-from app.services.rag.graph import build_rag_graph
 from app.services.vectorstore.chroma import ChromaVectorStore
-
-from app.guardrails.factory import (
-    build_input_guardrails,
-    build_output_guardrails
-)
-
-
+from app.tools.registry import ToolRegistry, build_default_tool_registry
+from database.sqlite import engine as sqlite_engine
 from database.sqlite import get_connection
+
+from app.agent.engine import SingleAgentOrchestrator
 
 # Initialize SQLite checkpointer for conversational memory globally
 _db_conn = get_connection()
@@ -101,17 +102,17 @@ def _build_common_rag_graph(retriever):
     """Helper to build a RAG graph with shared components."""
     settings = Settings.from_environment()
     context_builder = ContextBuilder()
-    
+
     reranker_model = get_cross_encoder_model(
         model=settings.reranker_model,
         device=settings.embedding_device,
     )
     reranker = CrossEncoderReranker(model=reranker_model)
-    
+
     llm = ClaudeService()
     input_guardrail = build_input_guardrails()
     output_guardrail = build_output_guardrails()
-    
+
     return build_rag_graph(
         retriever=retriever,
         reranker=reranker,
@@ -124,8 +125,27 @@ def _build_common_rag_graph(retriever):
 
 
 @lru_cache(maxsize=1)
+def get_hybrid_retriever() -> HybridRetriever:
+    """Singleton getter for the Hybrid Retriever (Dense + BM25)."""
+    components = build_components()
+
+    dense_retriever = DenseRetriever(
+        embedder=components.embedder,
+        vector_store=components.vector_store,
+    )
+
+    bm25_store = BM25Store(db_path="data/bm25.db")
+    bm25_retriever = BM25Retriever(bm25_store=bm25_store)
+
+    return HybridRetriever(
+        dense_retriever=dense_retriever,
+        bm25_retriever=bm25_retriever,
+    )
+
+
+@lru_cache(maxsize=1)
 def get_rag_graph():
-    """Single dense-vector retrieval graph (original)."""
+    """Single dense-vector retrieval graph."""
     components = build_components()
 
     retriever = DenseRetriever(
@@ -138,40 +158,42 @@ def get_rag_graph():
 
 @lru_cache(maxsize=1)
 def get_hybrid_rag_graph():
-    """
-    Hybrid retrieval graph: Dense + BM25 → RRF Fusion → Reranker → LLM.
-
-    Use this via Depends(get_hybrid_rag_graph) on any endpoint.
-    """
-    components = build_components()
-
-    # Dense retriever
-    dense_retriever = DenseRetriever(
-        embedder=components.embedder,
-        vector_store=components.vector_store,
-    )
-
-    # BM25 retriever
-    bm25_store = BM25Store(db_path="data/bm25.db")
-    bm25_retriever = BM25Retriever(bm25_store=bm25_store)
-
-    # Hybrid = Dense + BM25 fused with RRF
-    retriever = HybridRetriever(
-        dense_retriever=dense_retriever,
-        bm25_retriever=bm25_retriever,
-    )
-
+    """Hybrid retrieval graph: Dense + BM25 → RRF Fusion → Reranker → LLM."""
+    retriever = get_hybrid_retriever()
     return _build_common_rag_graph(retriever)
 
 
 @lru_cache(maxsize=1)
 def get_llm() -> ClaudeService:
-    """
-    Return the shared ClaudeService instance.
-
-    Inject this via Depends(get_llm) whenever an endpoint needs
-    to call the LLM directly (e.g. streaming) without going through
-    the full LangGraph.
-    """
+    """Return shared ClaudeService instance."""
     return ClaudeService()
 
+
+_tool_registry_instance: Optional[ToolRegistry] = None
+
+
+def get_tool_registry(
+    retriever: HybridRetriever = Depends(get_hybrid_retriever),
+) -> ToolRegistry:
+    """Dependency provider for the ToolRegistry instance."""
+    global _tool_registry_instance
+    if _tool_registry_instance is None:
+        _tool_registry_instance = build_default_tool_registry(
+            retriever=retriever, db_engine=sqlite_engine
+        )
+    return _tool_registry_instance
+
+
+
+# Add to app/api/dependencies.py
+
+
+def get_agent_orchestrator(
+    llm: ClaudeService = Depends(get_llm),
+    tool_registry: ToolRegistry = Depends(get_tool_registry),
+) -> SingleAgentOrchestrator:
+    return SingleAgentOrchestrator(
+        llm_service=llm,
+        tool_registry=tool_registry,
+        max_iterations=5
+    )
