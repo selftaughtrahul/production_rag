@@ -39,10 +39,18 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
 
         from app.core.device import resolve_torch_device
 
+        from app.core.config import Settings
+
         device = resolve_torch_device(device)
+        token = Settings.from_environment().hf_token
         self.model_name = model
         self.device = device
-        self.model = SentenceTransformer(model, device=device)
+        try:
+            self.model = SentenceTransformer(
+                model, device=device, token=token, local_files_only=True
+            )
+        except Exception:
+            self.model = SentenceTransformer(model, device=device, token=token)
         dimension_getter = getattr(self.model, "get_embedding_dimension", None)
         if dimension_getter is None:
             dimension_getter = self.model.get_sentence_embedding_dimension

@@ -63,6 +63,7 @@ class Settings:
     IS_ASYNC:bool
     enable_nemo: bool
     nemo_config_path: str
+    hf_token: str | None
 
 
 
@@ -116,6 +117,7 @@ class Settings:
                 "NEMO_CONFIG_PATH",
                 str(Path(__file__).resolve().parent.parent / "guardrails" / "nemo_config"),
             ),
+            hf_token=_optional_env("HF_TOKEN") or _optional_env("HUGGING_FACE_HUB_TOKEN"),
 
 
 

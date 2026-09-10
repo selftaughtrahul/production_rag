@@ -59,7 +59,9 @@ def main() -> int:
         str(args.api_port),
     ]
     if not args.no_reload:
-        api_cmd.append("--reload")
+        # Only watch app code. Checkpoint/DB writes must not restart uvicorn
+        # mid-request (that is what made the first chat return 401).
+        api_cmd.extend(["--reload", "--reload-dir", str(ROOT / "app")])
 
     ui_cmd = [
         sys.executable,

@@ -103,9 +103,6 @@ async def _run_agent(master_graph, question: str, user_id: str, thread_id: str, 
 @router.post("/", summary="Chat (basic RAG, hybrid RAG, or multi-agent)")
 async def chat(
     request: ChatRequest,
-    rag_graph=Depends(get_rag_graph),
-    hybrid_graph=Depends(get_hybrid_rag_graph),
-    master_graph=Depends(get_master_agent_graph),
     llm: ClaudeService = Depends(get_llm),
     current_user: UserInDB = Depends(get_current_user),
 ):
@@ -124,9 +121,12 @@ async def chat(
     mode = request.mode
     user_id = current_user.id
     config = _build_graph_config(thread_id, user_id, mode)
-    graph = hybrid_graph if mode == "hybrid" else rag_graph
 
     async def event_generator():
+        # Send headers immediately so the UI does not sit on a pending POST
+        # while embeddings / the reranker / NeMo load on a cold start.
+        yield ": keepalive\n\n"
+
         full_answer = ""
         extra = {
             "iterations": 0,
@@ -136,6 +136,7 @@ async def chat(
 
         try:
             if mode == "agent":
+                master_graph = await get_master_agent_graph()
                 agent_result = await _run_agent(
                     master_graph, question, user_id, thread_id, mode
                 )
@@ -148,6 +149,9 @@ async def chat(
                 if full_answer:
                     yield _sse({"type": "token", "content": full_answer})
             else:
+                graph = await (
+                    get_hybrid_rag_graph() if mode == "hybrid" else get_rag_graph()
+                )
                 state = await graph.ainvoke(
                     _build_rag_input(question, user_id, skip_generate=True),
                     config=config,

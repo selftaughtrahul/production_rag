@@ -72,8 +72,22 @@ def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddi
 @lru_cache(maxsize=1)
 def get_cross_encoder_model(model: str, device: str | None = None) -> CrossEncoder:
     resolved = resolve_torch_device(device)
+    token = Settings.from_environment().hf_token
     print(f"Loading cross encoder model: {model} on {resolved}...")
-    return CrossEncoder(model, device=resolved)
+    try:
+        return CrossEncoder(model, device=resolved, token=token, local_files_only=True)
+    except Exception:
+        return CrossEncoder(model, device=resolved, token=token)
+
+
+def warm_retrieval_models() -> None:
+    """Load embedding and reranker weights so the first chat is not a cold start."""
+    settings = Settings.from_environment()
+    get_embedding_provider(settings.embedding_model, settings.embedding_device)
+    get_cross_encoder_model(
+        settings.reranker_model,
+        resolve_torch_device(settings.embedding_device),
+    )
 
 
 @lru_cache(maxsize=1)
