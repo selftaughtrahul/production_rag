@@ -78,6 +78,14 @@ def get_db() -> Generator[
         conn.close()
 
 
+def _ensure_column(cursor: sqlite3.Cursor,table: str,column: str,definition: str) -> None:
+    """Add a column to an existing table when CREATE TABLE IF NOT EXISTS is a no-op."""
+    cursor.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cursor.fetchall()}
+    if column not in existing:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db() -> None:
     """
     Create application database tables if they do not exist.
@@ -109,6 +117,7 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
                 file_name TEXT NOT NULL,
+                file_path TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
                 FOREIGN KEY (user_id)
@@ -117,6 +126,7 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_column(cursor, "documents", "file_path", "TEXT")
 
         # User Memories table
         cursor.execute(
