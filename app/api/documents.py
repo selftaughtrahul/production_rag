@@ -5,10 +5,10 @@ Document management routes.
 """
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from uuid import uuid4
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from typing import List
 from app.api.dependencies import build_components, build_ingestion_pipeline
 from app.models.schemas import DocumentResponse, UserInDB
@@ -20,25 +20,49 @@ settings = Settings.from_environment()
 
 router = APIRouter(tags=["Documents"])
 
+_DOCUMENTS_ROOT = Path("documents")
 
 
+def _save_upload(file: UploadFile,content: bytes,*,user_id: str,document_id: str) -> str:
+    """Save the upload under documents/{user_id}/{document_id}{ext}."""
+    suffix = Path(file.filename or "upload").suffix
+    dest_dir = _DOCUMENTS_ROOT / user_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{document_id}{suffix}"
+    dest.write_bytes(content)
+    return str(dest)
 
-def _save_upload(file: UploadFile, content: bytes) -> str:
-    """Save uploaded bytes to a temp file and return its path."""
-    temp_dir = Path("documents/temp")
-    temp_dir.mkdir(parents=True, exist_ok=True)
 
-    suffix = Path(file.filename).suffix
+def _resolve_stored_file(file_path: str | None) -> Path | None:
+    """Return a path only if it exists under the documents directory."""
+    if not file_path:
+        return None
 
-    with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=suffix) as tmp:
-        tmp.write(content)
-        return tmp.name
+    try:
+        resolved = Path(file_path).resolve()
+        root = _DOCUMENTS_ROOT.resolve()
+        if root not in resolved.parents:
+            return None
+        return resolved
+    except OSError:
+        return None
+
+
+def _delete_stored_file(file_path: str | None) -> None:
+    """Remove a stored upload only if it lives under the documents directory."""
+    resolved = _resolve_stored_file(file_path)
+    if resolved is None:
+        return
+
+    try:
+        resolved.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 
 @router.get("/tasks/{task_id}", summary="Check background task status")
-async def get_task_status(
-    task_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def get_task_status(task_id: str,current_user: UserInDB = Depends(get_current_user)):
     """Get the status and result of a background ingestion task."""
     task_result = AsyncResult(task_id, app=ingest_document_task.app)
 
@@ -70,12 +94,12 @@ async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = 
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
     document_id = str(uuid4())
-    temp_path = _save_upload(file, content)
+    file_path = _save_upload(file,content,user_id=current_user.id,document_id=document_id)
 
     IS_ASYNC = settings.IS_ASYNC
     if IS_ASYNC:
         task = ingest_document_task.delay(
-            source=temp_path,
+            source=file_path,
             document_id=document_id,
             filename=file.filename,
             user_id=current_user.id,
@@ -90,9 +114,9 @@ async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = 
         }
 
     # ── Synchronous mode (dev / Windows) ───────────────────
-    pipeline = build_ingestion_pipeline(source=temp_path)
+    pipeline = build_ingestion_pipeline(source=file_path)
     result = pipeline.ingest(
-        source=temp_path,
+        source=file_path,
         document_id=document_id,
         filename=file.filename,
         user_id=current_user.id,
@@ -100,8 +124,8 @@ async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = 
 
     conn, cursor = db
     cursor.execute(
-        "INSERT INTO documents (id, user_id, file_name) VALUES (?, ?, ?)",
-        (document_id, current_user.id, file.filename),
+        "INSERT INTO documents (id, user_id, file_name, file_path) VALUES (?, ?, ?, ?)",
+        (document_id, current_user.id, file.filename, file_path),
     )
 
     return {
@@ -122,6 +146,27 @@ async def list_documents( current_user: UserInDB = Depends(get_current_user), db
         (current_user.id,),
     )
     return [dict(row) for row in cursor.fetchall()]
+
+@router.get("/documents/download/{document_id}", summary="Download a document")
+async def get_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
+    """Download the original file for a document the user owns."""
+    if not document_id.strip():
+        raise HTTPException(status_code=400, detail="document_id is required")
+
+    conn, cursor = db
+    cursor.execute(
+        "SELECT file_name, file_path FROM documents WHERE id = ? AND user_id = ?",
+        (document_id, current_user.id),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    stored = _resolve_stored_file(row["file_path"])
+    if stored is None or not stored.is_file():
+        raise HTTPException(status_code=404, detail="Document file not found")
+
+    return FileResponse(path=stored, filename=row["file_name"])
 
 @router.delete("/documents/{document_id}", summary="Delete a document")
 async def delete_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
@@ -146,7 +191,16 @@ async def delete_document(document_id: str,current_user: UserInDB = Depends(get_
     vector_store.delete_document(document_id)
 
     conn, cursor = db
-    cursor.execute("DELETE FROM documents WHERE id = ? AND user_id = ?",(document_id, current_user.id),)
+    cursor.execute(
+        "SELECT file_path FROM documents WHERE id = ? AND user_id = ?",
+        (document_id, current_user.id),
+    )
+    row = cursor.fetchone()
+    _delete_stored_file(row["file_path"] if row else None)
+    cursor.execute(
+        "DELETE FROM documents WHERE id = ? AND user_id = ?",
+        (document_id, current_user.id),
+    )
 
     return {
         "success": True,
