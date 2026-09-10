@@ -12,20 +12,24 @@ class APIClient:
         self.token = None
         self.last_session_id = None
 
-    def set_token(self, token: str):
+    def set_token(self, token: str | None):
         self.token = token
+        st.session_state.access_token = token
 
     def get_headers(self):
+        token = self.token or st.session_state.get("access_token")
+        if token and not self.token:
+            self.token = token
         headers = {}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         return headers
 
     def _check_auth(self, response):
         if response.status_code == 401:
             st.session_state.is_authenticated = False
+            st.session_state.access_token = None
             self.token = None
-            st.rerun()
 
     def login(self, username, password):
         response = requests.post(
@@ -34,7 +38,7 @@ class APIClient:
         )
         if response.status_code == 200:
             data = response.json()
-            self.token = data.get("access_token")
+            self.set_token(data.get("access_token"))
             return True, "Login successful"
         return False, response.text
 
@@ -101,9 +105,18 @@ class APIClient:
         headers = self.get_headers()
         headers["Content-Type"] = "application/json"
         
-        response = requests.post(url, headers=headers, json=payload, stream=True)
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=(15, 600),
+        )
         self._check_auth(response)
-        
+
+        if response.status_code == 401:
+            yield "Your session expired. Please log in again."
+            return
         if response.status_code != 200:
             yield f"Error: {response.text}"
             return

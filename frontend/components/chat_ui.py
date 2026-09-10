@@ -9,30 +9,27 @@ def render_chat_ui(api_client):
             st.markdown(message["content"])
 
     # React to user input
-    if prompt := st.chat_input("Ask a question about your documents..."):
-        # Display user message in chat message container
-        st.chat_message("user").markdown(prompt)
-        # Add user message to chat history
+    if prompt := st.chat_input(
+        "Ask a question about your documents...",
+        submit_mode="disable",
+    ):
         st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-        # Display assistant response in chat message container
         with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
-            
-            # Stream the response from the API
-            for chunk in api_client.query_stream(
-                prompt,
-                st.session_state.current_session_id,
-                st.session_state.chat_mode,
-            ):
-                full_response += chunk
-                message_placeholder.markdown(full_response + "▌")
-                
-            message_placeholder.markdown(full_response)
+            with st.spinner("Thinking..."):
+                full_response = st.write_stream(
+                    api_client.query_stream(
+                        prompt,
+                        st.session_state.current_session_id,
+                        st.session_state.chat_mode,
+                    )
+                )
 
         if api_client.last_session_id:
             st.session_state.current_session_id = api_client.last_session_id
 
-        # Add assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": full_response or ""}
+        )

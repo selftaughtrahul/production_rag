@@ -47,6 +47,7 @@ def render_sidebar(api_client):
         st.divider()
         if st.button("Logout"):
             st.session_state.is_authenticated = False
+            st.session_state.access_token = None
             st.session_state.api_client.set_token(None)
             st.session_state.current_session_id = None
             st.session_state.messages = []
