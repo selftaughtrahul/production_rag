@@ -19,17 +19,30 @@ WEB_HINTS = (
     "today's",
     "current price",
     "stock",
+    "stoc",
     "share price",
     "ticker",
+    "tsla",
     "live price",
     "breaking",
     "search the web",
     "on the internet",
 )
+LIVE_WORDS = ("today", "current", "now", "live", "latest", "right now")
+PRICE_WORDS = ("price", "stock", "stoc", "share", "ticker", "quote")
 
 
 def _has_hint(text: str, hints: tuple[str, ...]) -> bool:
     return any(hint in text for hint in hints)
+
+
+def wants_web(text: str) -> bool:
+    """True for live facts: news, weather, and market prices (including typos like stoc)."""
+    if _has_hint(text, WEB_HINTS):
+        return True
+    has_live = any(word in text for word in LIVE_WORDS)
+    has_price = any(word in text for word in PRICE_WORDS)
+    return has_live and has_price
 
 
 def next_agent(query: str, already_ran: list[str]) -> str | None:
@@ -49,7 +62,7 @@ def next_agent(query: str, already_ran: list[str]) -> str | None:
         hits.append("rag_agent")
     if _has_hint(text, SQL_HINTS):
         hits.append("sql_agent")
-    if _has_hint(text, WEB_HINTS):
+    if wants_web(text):
         hits.append("web_agent")
     if len(hits) > 1:
         return None

@@ -226,14 +226,15 @@ class WebAgentNode:
         try:
             search_raw = await search_tool.ainvoke({"query": query, "max_results": 5})
             synth_prompt = f"""\
-You are a web research specialist. Based on the following live web search results, synthesize a concise and factual answer to the question.
+You already have live web search results. Use only those results.
+Never say you cannot browse the internet or that your knowledge is outdated.
 
 Question: {query}
 
 Search Results:
 {search_raw}
 
-Answer:"""
+Answer with the latest figure or fact from the results, and mention the source if a URL is present:"""
             answer = await self.llm.agenerate(prompt=synth_prompt, max_tokens=600)
         except Exception as e:
             logger.error(f"[Web Agent] Search error: {e}", exc_info=True)
