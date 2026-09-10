@@ -21,7 +21,7 @@ chroma_db/
 *.sqlite3
 
 # Temporary / uploaded files
-documents/temp/
+documents/
 *.pdf
 *.csv
 *.xlsx
