@@ -61,6 +61,8 @@ class Settings:
     rerank_top_k: int
     LOG_DIR:str
     IS_ASYNC:bool
+    enable_nemo: bool
+    nemo_config_path: str
 
 
 
@@ -109,6 +111,11 @@ class Settings:
             rerank_top_k=int(os.getenv("RERANK_TOP_K", "5")),
             IS_ASYNC=_env_flag("IS_ASYNC", "false"),
             LOG_DIR=os.getenv("LOG_DIR", "logs"),
+            enable_nemo=_env_flag("ENABLE_NEMO", "true"),
+            nemo_config_path=os.getenv(
+                "NEMO_CONFIG_PATH",
+                str(Path(__file__).resolve().parent.parent / "guardrails" / "nemo_config"),
+            ),
 
 
 

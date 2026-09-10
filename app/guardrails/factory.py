@@ -13,7 +13,11 @@ from app.guardrails.output.safety import OutputSafetyGuardrail
 def build_input_guardrails(nemo_provider=None, presidio_provider=None, llama_guard_provider=None) -> InputGuardrailService:
 
     input_validator = InputValidationGuardrail(max_length=10_000)
-    prompt_injection = PromptInjectionGuardrail(provider=nemo_provider) if nemo_provider else None
+    prompt_injection = (
+        PromptInjectionGuardrail(provider=nemo_provider)
+        if nemo_provider is not None and getattr(nemo_provider, "is_ready", False)
+        else None
+    )
     pii_detector = InputPresidioGuardrail(provider=presidio_provider) if presidio_provider else None
     safety_checker = InputSafetyGuardrail(provider=llama_guard_provider) if llama_guard_provider else None
 

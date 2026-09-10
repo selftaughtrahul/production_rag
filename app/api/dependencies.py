@@ -129,7 +129,7 @@ def _build_common_rag_graph(retriever, checkpointer: AsyncSqliteSaver):
     reranker = CrossEncoderReranker(model=reranker_model)
 
     llm = ClaudeService()
-    input_guardrail = build_input_guardrails()
+    input_guardrail = build_input_guardrails(nemo_provider=get_nemo_provider())
     output_guardrail = build_output_guardrails()
 
     return build_rag_graph(
@@ -191,6 +191,18 @@ async def get_hybrid_rag_graph():
 
 
 @lru_cache(maxsize=1)
+def get_nemo_provider():
+    """Load NeMo only when enabled and the config/API key are usable."""
+    settings = Settings.from_environment()
+    if not settings.enable_nemo:
+        return None
+    from app.guardrails.provider.nemo import NeMoProvider
+
+    provider = NeMoProvider(config_path=settings.nemo_config_path)
+    return provider if provider.is_ready else None
+
+
+@lru_cache(maxsize=1)
 def get_llm() -> ClaudeService:
     """Return shared ClaudeService instance."""
     return ClaudeService()
@@ -234,7 +246,7 @@ async def get_master_agent_graph():
                 llm=llm,
                 tool_registry=tool_registry,
                 compiled_rag_graph=compiled_rag,
-                input_guardrails=build_input_guardrails(),
+                input_guardrails=build_input_guardrails(nemo_provider=get_nemo_provider()),
                 output_guardrails=build_output_guardrails(),
                 checkpointer=checkpointer,
             )
