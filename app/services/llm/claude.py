@@ -239,7 +239,7 @@ Guidelines:
 
         rewritten_question = self.generate_text(
             prompt=prompt,
-            max_tokens=256,
+            max_tokens=32,
             chat_history=chat_history,
         )
 

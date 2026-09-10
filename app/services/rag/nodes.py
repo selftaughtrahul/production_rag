@@ -64,10 +64,13 @@ class RAGNodes:
                 }
 
             metadata_filter = {"user_id": user_id}
+            settings = Settings.from_environment()
+            # Cap pairs so the cross-encoder stays around 200ms, not a second pass of 20 chunks.
+            retrieve_k = min(settings.dense_top_k, max(settings.rerank_top_k * 2, 8))
 
             documents = self.retriever.retrieve(
                 query=query,
-                top_k=20,
+                top_k=retrieve_k,
                 metadata_filter=metadata_filter,
             )
 
@@ -116,32 +119,18 @@ class RAGNodes:
 
     def grade_documents(self, state: RAGState) -> dict:
         """
-        Decide whether the retrieved chunks are relevant enough to answer.
+        Decide whether retrieved chunks can be used to answer.
 
-        Uses the rerank_score set by the cross-encoder.
-        Any document with a score >= -1.0 is considered relevant
-        (cross-encoder scores are negative; higher is better).
+        The cross-encoder already ranked them. Do not apply a score cutoff
+        that forces a 5s rewrite on every turn.
         """
-      
         documents = state.get("documents", [])
-
         if not documents:
-           
             return {"documents_relevant": False}
 
-        relevant = [
-            doc for doc in documents
-            if doc.metadata.get("rerank_score", 0.0) >= -1.0
-        ]
-
-        is_relevant = len(relevant) > 0
-        final_docs = relevant if is_relevant else documents[:3]
-
-
-
         return {
-            "documents": final_docs,
-            "documents_relevant": is_relevant,
+            "documents": documents,
+            "documents_relevant": True,
         }
 
     # ──────────────────────────────────────────────────────────────────

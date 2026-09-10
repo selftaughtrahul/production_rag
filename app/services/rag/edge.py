@@ -13,7 +13,9 @@ def decide_after_grading(state: RAGState):
     if relevant:
         return "build_context"
 
-    if retry_count >= 2:
+    # Rewrite is a full Sonnet call (~5s). Only do it when retrieve returned nothing.
+    documents = state.get("documents") or []
+    if documents or retry_count >= 1:
         return "build_context"
 
     return "rewrite"
