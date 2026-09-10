@@ -17,8 +17,8 @@ def ingest_document_task(source: str, document_id: str, filename: str, user_id: 
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT INTO documents (id, user_id, file_name) VALUES (?, ?, ?)",
-            (document_id, user_id, filename),
+            "INSERT INTO documents (id, user_id, file_name, file_path) VALUES (?, ?, ?, ?)",
+            (document_id, user_id, filename, source),
         )
         conn.commit()
     finally:
