@@ -1,4 +1,3 @@
-import operator
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
@@ -11,6 +10,17 @@ class AgentOutput(BaseModel):
     agent_name: str
     result: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+def merge_agent_outputs(
+    existing: List[AgentOutput] | None,
+    incoming: List[AgentOutput] | None,
+) -> List[AgentOutput]:
+    """Append this turn's outputs. A __reset__ item drops the previous turn."""
+    incoming = incoming or []
+    if any(item.agent_name == "__reset__" for item in incoming):
+        return [item for item in incoming if item.agent_name != "__reset__"]
+    return list(existing or []) + list(incoming)
 
 
 class SupervisorState(TypedDict, total=False):
@@ -30,7 +40,7 @@ class SupervisorState(TypedDict, total=False):
     next_node: str
 
     # Trajectory of sub-agent outputs
-    agent_outputs: Annotated[List[AgentOutput], operator.add]
+    agent_outputs: Annotated[List[AgentOutput], merge_agent_outputs]
 
     # Synthesized final answer
     final_response: Optional[str]

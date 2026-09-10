@@ -16,7 +16,7 @@ from app.api.dependencies import (
     get_rag_graph,
 )
 from app.api.session_access import ensure_session_owner, list_owned_thread_ids
-from app.memory.persist import persist_from_turn
+from app.memory.persist import persist_from_turn_background
 from app.models.schemas import ChatMode, ChatRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
 from app.services.llm.claude import ClaudeService
@@ -80,7 +80,7 @@ async def _run_agent(master_graph, question: str, user_id: str, thread_id: str, 
             "user_id": user_id,
             "thread_id": thread_id,
             "iterations": 0,
-            "max_iterations": 5,
+            "max_iterations": 2,
         },
         config=_build_graph_config(thread_id, user_id, mode),
     )
@@ -173,7 +173,7 @@ async def chat(
                         ],
                     },
                 )
-                persist_from_turn(llm, user_id, question, full_answer)
+                persist_from_turn_background(llm, user_id, question, full_answer)
 
             yield _sse(
                 {

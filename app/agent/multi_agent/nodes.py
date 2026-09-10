@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.agent.multi_agent.state import AgentOutput, SupervisorState
 from app.guardrails.input_service import InputGuardrailService
 from app.guardrails.output_service import OutputGuardrailService
-from app.memory.persist import persist_from_turn
+from app.memory.persist import persist_from_turn_background
 from app.memory.service import MemoryService
 from app.services.llm.claude import ClaudeService
 from app.tools.registry import ToolRegistry
@@ -24,12 +24,20 @@ class InputGuardrailNode:
         self.guardrail_service = guardrail_service
 
     async def __call__(self, state: SupervisorState) -> Dict[str, Any]:
+        # Same thread_id reuses the checkpoint. Clear last turn so Tesla
+        # is not answered with the previous few-shot reply.
+        update: Dict[str, Any] = {
+            "agent_outputs": [AgentOutput(agent_name="__reset__", result="")],
+            "iterations": 0,
+            "final_response": None,
+            "next_node": "",
+            "input_guardrail_passed": True,
+            "input_guardrail_reason": None,
+        }
+
         query = state.get("query", "")
         if self.guardrail_service is None:
-            return {
-                "input_guardrail_passed": True,
-                "input_guardrail_reason": None,
-            }
+            return update
 
         logger.info("[InputGuardrail] Validating query before supervisor routing...")
         result = await self.guardrail_service.validate(query)
@@ -37,15 +45,18 @@ class InputGuardrailNode:
         if not result.passed:
             logger.warning(f"[InputGuardrail] Query BLOCKED: {result.reason}")
 
-        return {
-            "input_guardrail_passed": result.passed,
-            "input_guardrail_reason": result.reason,
-            "guardrail_metadata": {
-                **state.get("guardrail_metadata", {}),
-                **result.metadata,
-                "input_action": result.action,
-            },
-        }
+        update.update(
+            {
+                "input_guardrail_passed": result.passed,
+                "input_guardrail_reason": result.reason,
+                "guardrail_metadata": {
+                    **state.get("guardrail_metadata", {}),
+                    **result.metadata,
+                    "input_action": result.action,
+                },
+            }
+        )
+        return update
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -335,7 +346,7 @@ class SaveMemoryNode:
         query = state.get("query", "")
         final_response = state.get("final_response", "")
 
-        persist_from_turn(self.llm, user_id, query, final_response)
+        persist_from_turn_background(self.llm, user_id, query, final_response)
         return {}
 
 

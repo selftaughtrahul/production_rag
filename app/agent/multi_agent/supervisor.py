@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Literal
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from app.agent.multi_agent.route import next_agent
 from app.agent.multi_agent.state import AgentOutput, SupervisorState
 from app.services.llm.claude import ClaudeService
 
@@ -66,12 +67,18 @@ class SupervisorNode:
                 "iterations": iterations,
             }
 
-        # Build prompt showing query, previous thoughts, and sub-agent outputs
         query = state.get("query", "")
+        agent_outputs: List[AgentOutput] = state.get("agent_outputs") or []
+        already_ran = [
+            out.agent_name for out in agent_outputs if out.agent_name != "__reset__"
+        ]
+        cheap = next_agent(query, already_ran)
+        if cheap:
+            logger.info("Supervisor cheap route -> %s", cheap)
+            return {"next_node": cheap, "iterations": iterations}
+
         memories = state.get("long_term_memories") or []
         memories_str = "\n".join(f"- {m}" for m in memories) or "(none)"
-
-        agent_outputs: List[AgentOutput] = state.get("agent_outputs") or []
         outputs_str = ""
         if agent_outputs:
             outputs_str = "\n\n".join(
@@ -111,9 +118,16 @@ Determine the next step:"""
         }
 
     async def synthesize(self, state: SupervisorState) -> Dict[str, Any]:
-        """Synthesizes all gathered information into the final user response."""
+        """Use the single specialist answer as-is. Call the LLM only when several agents ran."""
         query = state.get("query", "")
         agent_outputs: List[AgentOutput] = state.get("agent_outputs") or []
+        if len(agent_outputs) == 1 and (agent_outputs[0].result or "").strip():
+            final_text = agent_outputs[0].result.strip()
+            return {
+                "final_response": final_text,
+                "messages": [AIMessage(content=final_text)],
+            }
+
         memories = state.get("long_term_memories") or []
         memories_str = "\n".join(f"- {m}" for m in memories) or "(none)"
 

@@ -245,6 +245,7 @@ Guidelines:
 
         return rewritten_question
 
+    @traceable(name="ChatAnthropic", run_type="llm")
     async def agenerate(
         self,
         prompt: str,

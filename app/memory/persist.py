@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from app.memory.extractor import MemoryExtractor
 from app.memory.service import MemoryService
 from database.sqlite import get_connection
 
 logger = logging.getLogger(__name__)
+
+
+def persist_from_turn_background(llm, user_id: str | None, user_text: str, assistant_text: str) -> None:
+    """Extract memory after the user already has their answer."""
+    thread = threading.Thread(
+        target=persist_from_turn,
+        args=(llm, user_id, user_text, assistant_text),
+        daemon=True,
+        name="persist-memory",
+    )
+    thread.start()
 
 
 def persist_from_turn(llm, user_id: str | None, user_text: str, assistant_text: str) -> None:
