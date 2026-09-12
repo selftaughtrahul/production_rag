@@ -100,6 +100,7 @@ async def _run_agent(master_graph, question: str, user_id: str, thread_id: str, 
     }
 
 
+@router.post("", summary="Chat (basic RAG, hybrid RAG, or multi-agent)")
 @router.post("/", summary="Chat (basic RAG, hybrid RAG, or multi-agent)")
 async def chat(
     request: ChatRequest,

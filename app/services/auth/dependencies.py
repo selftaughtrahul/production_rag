@@ -5,7 +5,7 @@ FastAPI dependency — extract and validate the current user from a JWT token.
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 
 from sqlalchemy import select
@@ -16,11 +16,11 @@ from app.services.auth.auth_service import decode_token
 from database.models import User
 from database.sqlite import get_db
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+_bearer = HTTPBearer(auto_error=True)
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    creds: HTTPAuthorizationCredentials = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> UserInDB:
     """
@@ -38,8 +38,9 @@ def get_current_user(
     )
 
     try:
-        payload = decode_token(token)
-        user_id: str | None = payload.get("sub")
+        payload = decode_token(creds.credentials)
+        raw_sub = payload.get("sub")
+        user_id = str(raw_sub) if raw_sub is not None else None
         if not user_id:
             raise credentials_exception
     except JWTError:

@@ -95,24 +95,52 @@ class APIClient:
             ]
         return []
 
-    def query_stream(self, question: str, session_id: str = None, mode: str = "basic"):
+    def query_stream(
+        self,
+        question: str,
+        session_id: str = None,
+        mode: str = "basic",
+        *,
+        access_token: str | None = None,
+    ):
         """Yields text chunks as they arrive from the single chat endpoint."""
-        url = f"{BASE_URL}/chat/"
         payload = {"question": question, "mode": mode}
         if session_id:
             payload["session_id"] = session_id
-        
-        headers = self.get_headers()
-        headers["Content-Type"] = "application/json"
-        
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            stream=True,
-            timeout=(15, 600),
-        )
-        self._check_auth(response)
+
+        # Capture the JWT on the script thread. st.write_stream may iterate this
+        # generator later, when session_state is empty and self.token is stale.
+        token = access_token or self.token or st.session_state.get("access_token")
+        if not token:
+            yield "You are not logged in. Please log in again."
+            return
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "text/event-stream",
+        }
+        http = requests.Session()
+        http.headers.update({"Authorization": f"Bearer {token}"})
+        try:
+            response = http.post(
+                f"{BASE_URL}/chat/",
+                headers=headers,
+                json=payload,
+                stream=True,
+                timeout=(15, 600),
+            )
+            if response.status_code in {301, 302, 307, 308}:
+                location = response.headers.get("Location")
+                if location:
+                    response = http.post(
+                        location,
+                        headers=headers,
+                        json=payload,
+                        stream=True,
+                        timeout=(15, 600),
+                    )
+        finally:
+            http.close()
 
         if response.status_code == 401:
             yield "Your session expired. Please log in again."
