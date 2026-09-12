@@ -1,6 +1,14 @@
 from app.services.rag.state import RAGState
 
 
+class LLMUnavailableError(RuntimeError):
+    """The LLM provider refused the call (quota, auth, or connectivity).
+
+    Carries a message that is safe to show the user, so callers can report the
+    real reason instead of a generic failure.
+    """
+
+
 def handle_node_error(state: RAGState, node_name: str, exc: Exception) -> dict:
     """
     Handle errors that occur in any RAG pipeline node.

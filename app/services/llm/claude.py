@@ -3,9 +3,53 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 
-from anthropic import Anthropic, AsyncAnthropic
+from anthropic import (
+    Anthropic,
+    APIConnectionError,
+    APIStatusError,
+    AsyncAnthropic,
+    AuthenticationError,
+    PermissionDeniedError,
+    RateLimitError,
+)
 from dotenv import load_dotenv
 from langsmith import traceable
+
+from app.core.exceptions import LLMUnavailableError
+
+# Provider wording that means "the account cannot spend right now".
+_QUOTA_MARKERS = ("usage limit", "credit balance", "billing", "quota")
+
+
+def _provider_message(exc: APIStatusError) -> str:
+    """Pull the human-readable message out of an Anthropic error body."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+    return str(exc)
+
+
+def _as_unavailable(exc: Exception) -> LLMUnavailableError | None:
+    """Map provider quota/auth/connectivity failures to a user-safe error."""
+    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+        return LLMUnavailableError(
+            "The AI provider rejected the configured API key. Check ANTHROPIC_API_KEY."
+        )
+    if isinstance(exc, RateLimitError):
+        return LLMUnavailableError(_provider_message(exc))
+    if isinstance(exc, APIConnectionError):
+        return LLMUnavailableError(
+            "The AI provider is unreachable right now. Please try again shortly."
+        )
+    if isinstance(exc, APIStatusError):
+        message = _provider_message(exc)
+        if any(marker in message.lower() for marker in _QUOTA_MARKERS):
+            return LLMUnavailableError(message)
+    return None
 
 
 class ClaudeService:
@@ -75,8 +119,9 @@ class ClaudeService:
                 messages=messages,
             )
         except Exception as e:
-            if "billing" in str(e).lower():
-                return "I'm having trouble accessing my knowledge base right now. Please check my account details or try again later."
+            unavailable = _as_unavailable(e)
+            if unavailable is not None:
+                raise unavailable from e
             raise
 
         return response.content[0].text.strip()
@@ -136,8 +181,9 @@ Question:
                 messages=messages,
             )
         except Exception as e:
-            if "billing" in str(e).lower():
-                return "I'm having trouble accessing my knowledge base right now. Please check my account details or try again later."
+            unavailable = _as_unavailable(e)
+            if unavailable is not None:
+                raise unavailable from e
             raise
 
         return response.content[0].text.strip()
@@ -205,14 +251,20 @@ Question:
         messages.append({"role": "user", "content": user_turn})
 
         # ── Stream from Anthropic ──────────────────────────────────────
-        async with self.async_client.messages.stream(
-            model=self.model,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=messages,
-        ) as stream:
-            async for text_token in stream.text_stream:
-                yield text_token
+        try:
+            async with self.async_client.messages.stream(
+                model=self.model,
+                max_tokens=1024,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                async for text_token in stream.text_stream:
+                    yield text_token
+        except Exception as exc:
+            unavailable = _as_unavailable(exc)
+            if unavailable is not None:
+                raise unavailable from exc
+            raise
 
     @traceable(run_type="llm", name="Claude Rewrite Query")
     def rewrite_query(
@@ -263,7 +315,13 @@ Guidelines:
         if system_prompt:
             kwargs["system"] = system_prompt
 
-        response = await self.async_client.messages.create(**kwargs)
+        try:
+            response = await self.async_client.messages.create(**kwargs)
+        except Exception as exc:
+            unavailable = _as_unavailable(exc)
+            if unavailable is not None:
+                raise unavailable from exc
+            raise
         return response.content[0].text.strip()
 
     async def agenerate_structured(

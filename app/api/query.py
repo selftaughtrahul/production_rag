@@ -16,6 +16,7 @@ from app.api.dependencies import (
     get_rag_graph,
 )
 from app.api.session_access import ensure_session_owner, list_owned_thread_ids
+from app.core.exceptions import LLMUnavailableError
 from app.memory.persist import persist_from_turn_background
 from app.models.schemas import ChatMode, ChatRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
@@ -186,6 +187,11 @@ async def chat(
                     **extra,
                 }
             )
+        except LLMUnavailableError as exc:
+            # Expected provider condition (quota, key, outage) — not a code bug,
+            # so report the real reason without a stack trace.
+            logger.warning("Chat unavailable mode=%s: %s", mode, exc)
+            yield _sse({"type": "error", "error": str(exc)})
         except Exception as exc:
             logger.error("Chat failed mode=%s: %s", mode, exc, exc_info=True)
             yield _sse({"type": "error", "error": "Query could not be completed."})
