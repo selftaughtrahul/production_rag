@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def _configure_hf_token() -> None:
+    ''' Configure the Hugging Face token '''
     token = Settings.from_environment().hf_token
     if not token:
         logger.info(
@@ -32,6 +33,7 @@ def _configure_hf_token() -> None:
 
 
 async def _warm_retrieval_models() -> None:
+    ''' Warm up the retrieval models warmup means pre-loading the models into memory '''
     from app.api.dependencies import warm_retrieval_models
 
     try:
@@ -43,7 +45,7 @@ async def _warm_retrieval_models() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise the SQLite schema and warm retrieval models."""
+    ''' Initialise the SQLite schema and warm retrieval models '''
     init_db()
     _configure_hf_token()
     warmup = asyncio.create_task(_warm_retrieval_models())
