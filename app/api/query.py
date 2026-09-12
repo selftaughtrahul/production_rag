@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
-CHAT_MODE = "agent"
 
 
 def generate_new_session_id() -> str:
@@ -28,13 +27,12 @@ def generate_new_session_id() -> str:
 def _build_graph_config(thread_id: str, user_id: str) -> dict:
     return {
         "configurable": {"thread_id": thread_id},
-        "run_name": f"chat-{CHAT_MODE}",
-        "tags": ["chat", CHAT_MODE],
+        "run_name": f"chat",
+        "tags": ["chat"],
         "metadata": {
             "source": "fastapi",
             "user_id": user_id,
             "session_id": thread_id,
-            "mode": CHAT_MODE,
         },
     }
 
@@ -104,15 +102,13 @@ async def chat(request: ChatRequest,current_user: UserInDB = Depends(get_current
                     "session_id": thread_id,
                     "question": question,
                     "answer": full_answer,
-                    "mode": CHAT_MODE,
                     "iterations": agent_result["iterations"],
                     "agent_trajectory": agent_result["agent_trajectory"],
                     "guardrail_metadata": agent_result["guardrail_metadata"],
                 }
             )
         except LLMUnavailableError as exc:
-            # Expected provider condition (quota, key, outage) — not a code bug,
-            # so report the real reason without a stack trace.
+
             logger.warning("Chat unavailable: %s", exc)
             yield _sse({"type": "error", "error": str(exc)})
         except Exception as exc:
