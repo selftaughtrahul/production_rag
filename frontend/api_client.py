@@ -99,12 +99,11 @@ class APIClient:
         self,
         question: str,
         session_id: str = None,
-        mode: str = "basic",
         *,
         access_token: str | None = None,
     ):
         """Yields text chunks as they arrive from the single chat endpoint."""
-        payload = {"question": question, "mode": mode}
+        payload = {"question": question}
         if session_id:
             payload["session_id"] = session_id
 

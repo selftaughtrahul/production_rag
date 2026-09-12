@@ -176,21 +176,6 @@ def get_hybrid_retriever() -> HybridRetriever:
     )
 
 
-async def get_rag_graph():
-    """Single dense-vector retrieval graph."""
-    if "rag" not in _compiled_graphs:
-        async with _graph_lock:
-            if "rag" not in _compiled_graphs:
-                components = build_components()
-                retriever = DenseRetriever(
-                    embedder=components.embedder,
-                    vector_store=components.vector_store,
-                )
-                checkpointer = await get_checkpointer()
-                _compiled_graphs["rag"] = _build_common_rag_graph(retriever, checkpointer)
-    return _compiled_graphs["rag"]
-
-
 async def get_hybrid_rag_graph():
     """Hybrid retrieval graph: Dense + BM25 → RRF Fusion → Reranker → LLM."""
     if "hybrid" not in _compiled_graphs:

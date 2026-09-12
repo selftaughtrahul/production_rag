@@ -23,7 +23,6 @@ def render_chat_ui(api_client):
                     api_client.query_stream(
                         prompt,
                         st.session_state.current_session_id,
-                        st.session_state.chat_mode,
                         access_token=st.session_state.get("access_token")
                         or api_client.token,
                     )

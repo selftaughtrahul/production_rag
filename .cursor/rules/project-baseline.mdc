@@ -8,7 +8,8 @@ alwaysApply: true
 Stack: FastAPI (`main.py`) + Streamlit (`frontend/`) + LangGraph RAG + Chroma + SQLite FTS5 + JWT.
 
 Do not change unless the task says so:
-- Chat: `POST /chat/`, SSE events `token` / `done`, modes `basic` | `hybrid` | `agent`
+- Chat: `POST /chat/`, SSE events `token` / `done`
+- One pipeline only: multi-agent supervisor over hybrid retrieval. No mode switch, no basic-RAG path
 - Session ids stay `session_<uuid>`
 - Streamlit chat UX
 

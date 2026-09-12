@@ -1,4 +1,4 @@
-"""Single chat API — basic RAG, hybrid RAG, or multi-agent via one endpoint."""
+"""Single chat API — multi-agent orchestrator over hybrid retrieval."""
 
 import json
 import logging
@@ -6,51 +6,36 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from app.api.dependencies import (
-    get_hybrid_rag_graph,
-    get_llm,
-    get_master_agent_graph,
-    get_rag_graph,
-)
+from app.api.dependencies import get_master_agent_graph
 from app.api.session_access import ensure_session_owner, list_owned_thread_ids
 from app.core.exceptions import LLMUnavailableError
-from app.memory.persist import persist_from_turn_background
-from app.models.schemas import ChatMode, ChatRequest, UserInDB
+from app.models.schemas import ChatRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
-from app.services.llm.claude import ClaudeService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
+CHAT_MODE = "agent"
 
 
 def generate_new_session_id() -> str:
     return f"session_{uuid.uuid4()}"
 
 
-def _build_graph_config(thread_id: str, user_id: str, mode: ChatMode) -> dict:
+def _build_graph_config(thread_id: str, user_id: str) -> dict:
     return {
         "configurable": {"thread_id": thread_id},
-        "run_name": f"chat-{mode}",
-        "tags": ["chat", mode],
+        "run_name": f"chat-{CHAT_MODE}",
+        "tags": ["chat", CHAT_MODE],
         "metadata": {
             "source": "fastapi",
             "user_id": user_id,
             "session_id": thread_id,
-            "mode": mode,
+            "mode": CHAT_MODE,
         },
-    }
-
-
-def _build_rag_input(question: str, user_id: str, skip_generate: bool = False) -> dict:
-    return {
-        "question": question,
-        "retry_count": 0,
-        "user_id": user_id,
-        "skip_generate": skip_generate,
     }
 
 
@@ -58,23 +43,7 @@ def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
-async def _stream_rag_answer(llm: ClaudeService, question: str, state: dict):
-    history_dicts = [
-        {
-            "role": "user" if isinstance(m, HumanMessage) else "assistant",
-            "content": m.content,
-        }
-        for m in state.get("chat_history", [])
-    ]
-    return llm.generate_stream(
-        question=question,
-        context=state.get("context", ""),
-        chat_history=history_dicts,
-        long_term_memories=state.get("long_term_memories") or [],
-    )
-
-
-async def _run_agent(master_graph, question: str, user_id: str, thread_id: str, mode: ChatMode) -> dict:
+async def _run_agent(master_graph, question: str, user_id: str, thread_id: str) -> dict:
     result = await master_graph.ainvoke(
         {
             "query": question,
@@ -83,7 +52,7 @@ async def _run_agent(master_graph, question: str, user_id: str, thread_id: str, 
             "iterations": 0,
             "max_iterations": 2,
         },
-        config=_build_graph_config(thread_id, user_id, mode),
+        config=_build_graph_config(thread_id, user_id),
     )
     trajectory = [
         {
@@ -101,18 +70,16 @@ async def _run_agent(master_graph, question: str, user_id: str, thread_id: str, 
     }
 
 
-@router.post("", summary="Chat (basic RAG, hybrid RAG, or multi-agent)")
-@router.post("/", summary="Chat (basic RAG, hybrid RAG, or multi-agent)")
+@router.post("", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
+@router.post("/", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
 async def chat(
     request: ChatRequest,
-    llm: ClaudeService = Depends(get_llm),
     current_user: UserInDB = Depends(get_current_user),
 ):
     """
-    One chat endpoint. Choose the pipeline with `mode`:
-    - basic: dense RAG subgraph
-    - hybrid: dense + BM25 + RRF RAG
-    - agent: supervisor multi-agent (RAG / SQL / web / general)
+    Single chat pipeline: the supervisor routes each turn to the RAG, SQL, web,
+    or general specialist. The RAG specialist retrieves with dense + BM25 + RRF
+    fusion and a cross-encoder rerank.
     """
     question = request.question.strip()
     if not question:
@@ -120,62 +87,19 @@ async def chat(
 
     ensure_session_owner(request.session_id, current_user.id)
     thread_id = request.session_id or generate_new_session_id()
-    mode = request.mode
     user_id = current_user.id
-    config = _build_graph_config(thread_id, user_id, mode)
 
     async def event_generator():
         # Send headers immediately so the UI does not sit on a pending POST
         # while embeddings / the reranker / NeMo load on a cold start.
         yield ": keepalive\n\n"
 
-        full_answer = ""
-        extra = {
-            "iterations": 0,
-            "agent_trajectory": [],
-            "guardrail_metadata": {},
-        }
-
         try:
-            if mode == "agent":
-                master_graph = await get_master_agent_graph()
-                agent_result = await _run_agent(
-                    master_graph, question, user_id, thread_id, mode
-                )
-                full_answer = agent_result["answer"]
-                extra = {
-                    "iterations": agent_result["iterations"],
-                    "agent_trajectory": agent_result["agent_trajectory"],
-                    "guardrail_metadata": agent_result["guardrail_metadata"],
-                }
-                if full_answer:
-                    yield _sse({"type": "token", "content": full_answer})
-            else:
-                graph = await (
-                    get_hybrid_rag_graph() if mode == "hybrid" else get_rag_graph()
-                )
-                state = await graph.ainvoke(
-                    _build_rag_input(question, user_id, skip_generate=True),
-                    config=config,
-                )
-                token_stream = await _stream_rag_answer(llm, question, state)
-                async for token in token_stream:
-                    if token:
-                        full_answer += token
-                        yield _sse({"type": "token", "content": token})
-
-                await graph.aupdate_state(
-                    config,
-                    {
-                        "question": question,
-                        "answer": full_answer,
-                        "chat_history": [
-                            HumanMessage(content=question),
-                            AIMessage(content=full_answer),
-                        ],
-                    },
-                )
-                persist_from_turn_background(llm, user_id, question, full_answer)
+            master_graph = await get_master_agent_graph()
+            agent_result = await _run_agent(master_graph, question, user_id, thread_id)
+            full_answer = agent_result["answer"]
+            if full_answer:
+                yield _sse({"type": "token", "content": full_answer})
 
             yield _sse(
                 {
@@ -183,17 +107,19 @@ async def chat(
                     "session_id": thread_id,
                     "question": question,
                     "answer": full_answer,
-                    "mode": mode,
-                    **extra,
+                    "mode": CHAT_MODE,
+                    "iterations": agent_result["iterations"],
+                    "agent_trajectory": agent_result["agent_trajectory"],
+                    "guardrail_metadata": agent_result["guardrail_metadata"],
                 }
             )
         except LLMUnavailableError as exc:
             # Expected provider condition (quota, key, outage) — not a code bug,
             # so report the real reason without a stack trace.
-            logger.warning("Chat unavailable mode=%s: %s", mode, exc)
+            logger.warning("Chat unavailable: %s", exc)
             yield _sse({"type": "error", "error": str(exc)})
         except Exception as exc:
-            logger.error("Chat failed mode=%s: %s", mode, exc, exc_info=True)
+            logger.error("Chat failed: %s", exc, exc_info=True)
             yield _sse({"type": "error", "error": "Query could not be completed."})
 
     return StreamingResponse(

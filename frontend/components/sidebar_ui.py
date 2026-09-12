@@ -15,20 +15,6 @@ def render_sidebar(api_client):
 
         st.divider()
 
-        st.header("Chat mode")
-        st.selectbox(
-            "Pipeline",
-            options=["basic", "hybrid", "agent"],
-            format_func=lambda value: {
-                "basic": "Basic RAG",
-                "hybrid": "Hybrid RAG",
-                "agent": "Multi-agent",
-            }[value],
-            key="chat_mode",
-        )
-
-        st.divider()
-
         st.header("Conversations")
         sessions = api_client.list_conversations()
         

@@ -8,8 +8,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, field_validator
 
-ChatMode = Literal["basic", "hybrid", "agent"]
-
 
 # ─────────────────────────────────────────────────────────────
 # Auth schemas
@@ -63,7 +61,6 @@ class UserInDB(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     session_id: str | None = None
-    mode: ChatMode = "basic"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -88,7 +85,7 @@ class ChatResponse(BaseModel):
     session_id: str
     question: str
     answer: str
-    mode: ChatMode = "basic"
+    mode: Literal["agent"] = "agent"
     iterations: int = 0
     agent_trajectory: list[dict[str, Any]] = []
     guardrail_metadata: dict[str, Any] = {}
