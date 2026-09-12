@@ -1,0 +1,54 @@
+﻿# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Vector DB & Storage
+data/
+chroma_db/
+*.db
+*.sqlite3
+*-shm
+*-wal
+
+# Temporary / uploaded files
+documents/
+*.pdf
+*.csv
+*.xlsx
+*.docx
+*.pptx
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs & local agent folders
+*.log
+.claude/
+.agents/
+
+# Large ML artifacts Cursor should not index
+datasets/
+*.parquet
+*.pkl
+*.pt
+*.ckpt
+*.safetensors
+mlruns/
+wandb/
+node_modules/
