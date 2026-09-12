@@ -1,0 +1,22 @@
+---
+description: Short stack map and non-negotiables. Always on; keep tiny to save tokens.
+alwaysApply: true
+---
+
+# basic_rag
+
+Stack: FastAPI (`main.py`) + Streamlit (`frontend/`) + LangGraph RAG + Chroma + SQLite FTS5 + JWT.
+
+Do not change unless the task says so:
+- Chat: `POST /chat/`, SSE events `token` / `done`, modes `basic` | `hybrid` | `agent`
+- Session ids stay `session_<uuid>`
+- Streamlit chat UX
+
+Work rules:
+- Edit existing files; do not invent paths, class names, or deps
+- One concern per change; small functions, not new class trees
+- Config from `Settings` / `.env` — never commit secrets
+- Type-hint functions; no mutable defaults; no bare `except:`
+- `logging`, not `print`; parameterize SQL
+- Skip Django/Next.js patterns; this is not those stacks
+- Do not paste `PROJECT_WORKFLOW.md` or the fix plan into new files

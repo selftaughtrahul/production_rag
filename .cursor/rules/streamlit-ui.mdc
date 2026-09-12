@@ -1,0 +1,15 @@
+---
+description: Streamlit chat UI conventions for frontend/.
+globs: frontend/**/*.py
+alwaysApply: false
+---
+
+# Streamlit UI
+
+Entry: `frontend/app.py`. Pieces: `auth_ui.py`, `chat_ui.py`, `sidebar_ui.py`, `api_client.py`.
+
+- Keep login → upload → chat flow; do not add a new multipage app unless asked
+- JWT lives in `st.session_state`; do not drop it on a slow first chat
+- Call the API only through `api_client.py`
+- Use `st.session_state` for widget state; no leftover `key=` that fights Streamlit
+- Match existing layout and widgets; do not restyle the whole app in a small fix

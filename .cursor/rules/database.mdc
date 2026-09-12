@@ -1,0 +1,15 @@
+---
+description: SQLite, FTS5, and persistence conventions.
+globs: database/**/*.py,app/memory/**/*.py,app/tools/sql_search.py,app/services/retriever/bm25_store.py
+alwaysApply: false
+---
+
+# Database
+
+Schema is created in `database/sqlite.py` (`init_db`). There are no Django migrations.
+
+- Parameterize every query; never format user text into SQL
+- Filter by `user_id` / owner on reads and writes (no tenant leaks)
+- Use the existing connection helper (`get_db` / `get_connection`); do not open ad-hoc engines
+- Multi-statement writes in one transaction; commit/rollback as `get_db` already does
+- BM25/FTS and memory tables stay in SQLite; vectors stay in Chroma

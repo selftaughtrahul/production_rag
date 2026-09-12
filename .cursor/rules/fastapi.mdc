@@ -1,0 +1,16 @@
+---
+description: FastAPI routers, auth, and SSE chat contract for this repo.
+globs: app/api/**/*.py,main.py
+alwaysApply: false
+---
+
+# FastAPI
+
+Routers live in `app/api/` and are registered in `main.py` (no `/v1` prefix).
+
+- Pydantic models for request/response (`app/models/schemas.py`); no raw dict bodies
+- Shared resources via `Depends()` (`get_current_user`, graphs, LLM)
+- Raise `HTTPException` with a real status; never hide errors in HTTP 200
+- Blocking work (SQLite, HF models, sync LangGraph) goes in `asyncio.to_thread` / Celery, not directly in `async def`
+- Chat streaming: `StreamingResponse`, SSE `data: {json}\n\n` with `token` then `done`
+- Auth: JWT Bearer; keep session ownership checks (`session_access`)
