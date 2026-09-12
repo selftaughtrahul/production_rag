@@ -72,10 +72,7 @@ async def _run_agent(master_graph, question: str, user_id: str, thread_id: str) 
 
 @router.post("", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
 @router.post("/", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
-async def chat(
-    request: ChatRequest,
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def chat(request: ChatRequest,current_user: UserInDB = Depends(get_current_user),):
     """
     Single chat pipeline: the supervisor routes each turn to the RAG, SQL, web,
     or general specialist. The RAG specialist retrieves with dense + BM25 + RRF
@@ -139,10 +136,7 @@ async def list_conversations(current_user: UserInDB = Depends(get_current_user))
 
 
 @router.get("/conversations/{session_id}", summary="Get conversation chat history")
-async def get_conversation_history(
-    session_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def get_conversation_history(session_id: str,current_user: UserInDB = Depends(get_current_user),):
     ensure_session_owner(session_id, current_user.id)
 
     config = {"configurable": {"thread_id": session_id}}
