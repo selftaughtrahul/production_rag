@@ -9,7 +9,7 @@ from app.memory.persist import persist_from_turn_background
 from app.memory.service import MemoryService
 from app.services.llm.claude import ClaudeService
 from app.tools.registry import ToolRegistry
-from database.sqlite import get_connection
+from database.sqlite import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,9 @@ class LoadMemoryNode:
         if not user_id:
             return {"long_term_memories": []}
 
-        conn = get_connection()
+        session = SessionLocal()
         try:
-            memory_service = MemoryService(conn)
+            memory_service = MemoryService(session)
             memories = memory_service.get_user_memories(user_id=user_id, limit=10)
             facts = [m.memory for m in memories]
             logger.info(f"[LoadMemory] Loaded {len(facts)} long-term memories for user '{user_id}'")
@@ -81,7 +81,7 @@ class LoadMemoryNode:
             logger.warning(f"[LoadMemory] Failed to load memories for user '{user_id}': {e}")
             return {"long_term_memories": []}
         finally:
-            conn.close()
+            session.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

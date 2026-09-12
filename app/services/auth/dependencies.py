@@ -8,8 +8,12 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.models.schemas import UserInDB
 from app.services.auth.auth_service import decode_token
+from database.models import User
 from database.sqlite import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -17,7 +21,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db=Depends(get_db),
+    db: Session = Depends(get_db),
 ) -> UserInDB:
     """
     Decode JWT → look up user in MySQL → return UserInDB.
@@ -41,25 +45,20 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    conn, cursor = db
-    cursor.execute(
-        "SELECT id, username, email, is_active FROM users WHERE id = ?",
-        (user_id,),
-    )
-    row = cursor.fetchone()
+    user = db.scalar(select(User).where(User.id == user_id))
 
-    if row is None:
+    if user is None:
         raise credentials_exception
 
-    if not row["is_active"]:
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is inactive",
         )
 
     return UserInDB(
-        id=row["id"],
-        username=row["username"],
-        email=row["email"],
-        is_active=row["is_active"],
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        is_active=user.is_active,
     )

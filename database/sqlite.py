@@ -1,171 +1,59 @@
-"""
-SQLite database connection module.
-
-Provides:
-    - get_connection() -> raw SQLite connection
-    - get_db() -> FastAPI dependency yielding (connection, cursor)
-    - init_db() -> creates application tables if they do not exist
-"""
+"""SQLite engine, ORM session, and schema bootstrap."""
 
 from __future__ import annotations
 
-from typing import Generator
-import sqlite3
-from sqlalchemy import create_engine
+import logging
+from collections.abc import Generator
 
-from app.core.config import Settings
+from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.orm import Session, sessionmaker
+
+from database.models import Base, Document, MemoryRecord, User
+
+logger = logging.getLogger(__name__)
 
 DB_FILE_PATH = "rag_database.db"
 engine = create_engine(
     f"sqlite:///{DB_FILE_PATH}",
     connect_args={"check_same_thread": False},
 )
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
-def get_connection() -> sqlite3.Connection:
-    """
-    Create and return a new SQLite database connection.
-    """
-
-    conn = sqlite3.connect(
-        DB_FILE_PATH,
-        check_same_thread=False,
-    )
-
-    # Allows rows to be accessed like dictionaries:
-    # row["username"]
-    # row["email"]
-    conn.row_factory = sqlite3.Row
-
-    return conn
+@event.listens_for(engine, "connect")
+def _enable_foreign_keys(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
-def get_db() -> Generator[
-    tuple[sqlite3.Connection, sqlite3.Cursor],
-    None,
-    None,
-]:
-    """
-    FastAPI database dependency.
-
-    Usage:
-
-        @router.get("/users")
-        def get_users(db=Depends(get_db)):
-            conn, cursor = db
-
-            cursor.execute("SELECT * FROM users")
-
-            rows = cursor.fetchall()
-
-            return [dict(row) for row in rows]
-    """
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
+def get_db() -> Generator[Session, None, None]:
+    """FastAPI dependency that yields a SQLAlchemy session."""
+    session = SessionLocal()
     try:
-        yield conn, cursor
-
-        conn.commit()
-
+        yield session
+        session.commit()
     except Exception:
-        conn.rollback()
+        session.rollback()
         raise
-
     finally:
-        cursor.close()
-        conn.close()
+        session.close()
 
 
-def _ensure_column(cursor: sqlite3.Cursor,table: str,column: str,definition: str) -> None:
-    """Add a column to an existing table when CREATE TABLE IF NOT EXISTS is a no-op."""
-    cursor.execute(f"PRAGMA table_info({table})")
-    existing = {row[1] for row in cursor.fetchall()}
-    if column not in existing:
-        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+def _ensure_column(table: str, column: str, definition: str) -> None:
+    """Add a column when CREATE TABLE IF NOT EXISTS is a no-op on an old file."""
+    columns = {col["name"] for col in inspect(engine).get_columns(table)}
+    if column in columns:
+        return
+    with engine.begin() as connection:
+        connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
 
 
 def init_db() -> None:
-    """
-    Create application database tables if they do not exist.
-    """
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    try:
-
-        # Users table
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT 1
-            )
-            """
-        )
-
-        # Documents table
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS documents (
-                id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                file_name TEXT NOT NULL,
-                file_path TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-                FOREIGN KEY (user_id)
-                    REFERENCES users(id)
-                    ON DELETE CASCADE
-            )
-            """
-        )
-        _ensure_column(cursor, "documents", "file_path", "TEXT")
-
-        # User Memories table
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_memories (
-                id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                memory TEXT NOT NULL,
-                memory_type TEXT NOT NULL DEFAULT 'general',
-                importance REAL NOT NULL DEFAULT 0.5,
-                is_active BOOLEAN NOT NULL DEFAULT 1,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                
-                FOREIGN KEY (user_id)
-                    REFERENCES users(id)
-                    ON DELETE CASCADE
-            )
-            """
-        )
-        
-        # Index on user_id and is_active for user_memories
-        cursor.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_user_active_memories 
-            ON user_memories (user_id, is_active)
-            """
-        )
-
-        conn.commit()
-
-        print("[DB] users table ready.")
-        print("[DB] documents table ready.")
-        print("[DB] user_memories table ready.")
-
-    except Exception:
-        conn.rollback()
-        raise
-
-    finally:
-        cursor.close()
-        conn.close()
+    """Create application tables if they do not exist."""
+    Base.metadata.create_all(
+        bind=engine,
+        tables=[User.__table__, Document.__table__, MemoryRecord.__table__],
+    )
+    _ensure_column("documents", "file_path", "TEXT")
+    logger.info("SQLite schema ready (users, documents, user_memories).")

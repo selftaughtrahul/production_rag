@@ -10,6 +10,5 @@ Schema is created in `database/sqlite.py` (`init_db`). There are no Django migra
 
 - Parameterize every query; never format user text into SQL
 - Filter by `user_id` / owner on reads and writes (no tenant leaks)
-- Use the existing connection helper (`get_db` / `get_connection`); do not open ad-hoc engines
-- Multi-statement writes in one transaction; commit/rollback as `get_db` already does
-- BM25/FTS and memory tables stay in SQLite; vectors stay in Chroma
+- Use `get_db` / `SessionLocal` (SQLAlchemy `Session`); do not open sqlite3 cursors
+- BM25 FTS5 `MATCH` stays as bound `text()`; other chunk CRUD uses the `Chunk` ORM

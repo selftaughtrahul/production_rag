@@ -7,7 +7,7 @@ import threading
 
 from app.memory.extractor import MemoryExtractor
 from app.memory.service import MemoryService
-from database.sqlite import get_connection
+from database.sqlite import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,9 @@ def persist_from_turn(llm, user_id: str | None, user_text: str, assistant_text: 
         return
 
     conversation = f"User: {user_text}\nAssistant: {assistant_text}"
-    conn = get_connection()
+    session = SessionLocal()
     try:
-        memory_service = MemoryService(conn)
+        memory_service = MemoryService(session)
         existing = memory_service.get_user_memories(user_id=user_id, limit=20)
         decision = MemoryExtractor(llm).decide(
             user_id=user_id,
@@ -59,4 +59,4 @@ def persist_from_turn(llm, user_id: str | None, user_text: str, assistant_text: 
     except Exception:
         logger.warning("Failed to persist long-term memory for user=%s", user_id, exc_info=True)
     finally:
-        conn.close()
+        session.close()

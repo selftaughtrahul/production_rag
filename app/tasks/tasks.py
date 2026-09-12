@@ -5,7 +5,8 @@ from app.tasks.celery_app import celery_app
 def ingest_document_task(source: str, document_id: str, filename: str, user_id: str) -> dict:
     """Celery background task to ingest a document with tenant metadata."""
     from app.api.dependencies import build_ingestion_pipeline
-    from database.sqlite import get_connection
+    from database.models import Document
+    from database.sqlite import SessionLocal
 
     result = build_ingestion_pipeline(source=source).ingest(
         source=source,
@@ -14,14 +15,21 @@ def ingest_document_task(source: str, document_id: str, filename: str, user_id: 
         user_id=user_id,
     )
 
-    conn = get_connection()
+    session = SessionLocal()
     try:
-        conn.execute(
-            "INSERT INTO documents (id, user_id, file_name, file_path) VALUES (?, ?, ?, ?)",
-            (document_id, user_id, filename, source),
+        session.add(
+            Document(
+                id=document_id,
+                user_id=user_id,
+                file_name=filename,
+                file_path=source,
+            )
         )
-        conn.commit()
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
-        conn.close()
+        session.close()
 
     return result

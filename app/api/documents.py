@@ -14,8 +14,11 @@ from app.api.dependencies import build_components, build_ingestion_pipeline
 from app.models.schemas import DocumentResponse, UserInDB
 from app.services.auth.dependencies import get_current_user
 from app.tasks.tasks import ingest_document_task
+from database.models import Document
 from database.sqlite import get_db
 from app.core.config import Settings
+from sqlalchemy.orm import Session
+from sqlalchemy import select
 settings = Settings.from_environment()
 
 router = APIRouter(tags=["Documents"])
@@ -79,7 +82,11 @@ async def get_task_status(task_id: str,current_user: UserInDB = Depends(get_curr
     return response
 
 @router.post("/ingest", summary="Upload and ingest a document")
-async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
+async def ingest_document(
+    file: UploadFile = File(...),
+    current_user: UserInDB = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Upload a document and ingest it into the vector store.
 
@@ -122,10 +129,13 @@ async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = 
         user_id=current_user.id,
     )
 
-    conn, cursor = db
-    cursor.execute(
-        "INSERT INTO documents (id, user_id, file_name, file_path) VALUES (?, ?, ?, ?)",
-        (document_id, current_user.id, file.filename, file_path),
+    db.add(
+        Document(
+            id=document_id,
+            user_id=current_user.id,
+            file_name=file.filename,
+            file_path=file_path,
+        )
     )
 
     return {
@@ -138,38 +148,53 @@ async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = 
     }
 
 @router.get("/documents", response_model=List[DocumentResponse], summary="List user documents")
-async def list_documents( current_user: UserInDB = Depends(get_current_user), db=Depends(get_db)):
+async def list_documents(
+    current_user: UserInDB = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """List all documents uploaded by the authenticated user."""
-    conn, cursor = db
-    cursor.execute(
-        "SELECT id, user_id, file_name, created_at FROM documents WHERE user_id = ?",
-        (current_user.id,),
-    )
-    return [dict(row) for row in cursor.fetchall()]
+    rows = db.scalars(select(Document).where(Document.user_id == current_user.id)).all()
+    return [
+        DocumentResponse(
+            id=row.id,
+            user_id=row.user_id,
+            file_name=row.file_name,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 @router.get("/documents/download/{document_id}", summary="Download a document")
-async def get_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
+async def get_document(
+    document_id: str,
+    current_user: UserInDB = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Download the original file for a document the user owns."""
     if not document_id.strip():
         raise HTTPException(status_code=400, detail="document_id is required")
 
-    conn, cursor = db
-    cursor.execute(
-        "SELECT file_name, file_path FROM documents WHERE id = ? AND user_id = ?",
-        (document_id, current_user.id),
+    row = db.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.user_id == current_user.id,
+        )
     )
-    row = cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    stored = _resolve_stored_file(row["file_path"])
+    stored = _resolve_stored_file(row.file_path)
     if stored is None or not stored.is_file():
         raise HTTPException(status_code=404, detail="Document file not found")
 
-    return FileResponse(path=stored, filename=row["file_name"])
+    return FileResponse(path=stored, filename=row.file_name)
 
 @router.delete("/documents/{document_id}", summary="Delete a document")
-async def delete_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db=Depends(get_db)):
+async def delete_document(
+    document_id: str,
+    current_user: UserInDB = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Delete a document and all its vector chunks.
     Only the owning user can delete their own documents.
@@ -190,17 +215,15 @@ async def delete_document(document_id: str,current_user: UserInDB = Depends(get_
 
     vector_store.delete_document(document_id)
 
-    conn, cursor = db
-    cursor.execute(
-        "SELECT file_path FROM documents WHERE id = ? AND user_id = ?",
-        (document_id, current_user.id),
+    row = db.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.user_id == current_user.id,
+        )
     )
-    row = cursor.fetchone()
-    _delete_stored_file(row["file_path"] if row else None)
-    cursor.execute(
-        "DELETE FROM documents WHERE id = ? AND user_id = ?",
-        (document_id, current_user.id),
-    )
+    _delete_stored_file(row.file_path if row else None)
+    if row is not None:
+        db.delete(row)
 
     return {
         "success": True,

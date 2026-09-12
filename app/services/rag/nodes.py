@@ -8,7 +8,7 @@ from app.core.config import Settings
 from app.core.exceptions import handle_node_error
 from app.memory.persist import persist_from_turn
 from app.memory.service import MemoryService
-from database.sqlite import get_connection
+from database.sqlite import SessionLocal
 from .state import RAGState
 
 
@@ -200,11 +200,11 @@ class RAGNodes:
         if not user_id:
             return {"long_term_memories": []}
 
-        conn = get_connection()
+        session = SessionLocal()
         try:
-            memories = MemoryService(conn).get_user_memories(user_id=user_id, limit=10)
+            memories = MemoryService(session).get_user_memories(user_id=user_id, limit=10)
         finally:
-            conn.close()
+            session.close()
 
         return {"long_term_memories": [item.memory for item in memories]}
 
