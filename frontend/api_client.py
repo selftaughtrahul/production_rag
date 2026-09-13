@@ -1,8 +1,10 @@
-import requests
+import os
 import json
+
+import requests
 import streamlit as st
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
 
 _CHAT_ROLES = {"human": "user", "ai": "assistant", "user": "user", "assistant": "assistant"}
 

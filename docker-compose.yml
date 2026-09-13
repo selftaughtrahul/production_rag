@@ -3,30 +3,38 @@ services:
   redis:
     image: redis:7-alpine
     container_name: basic_rag_redis
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - basic_rag
     volumes:
       - redis_data:/data
-    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   chroma:
     image: chromadb/chroma:latest
     container_name: basic_rag_chroma
-    ports:
-      - "8001:8000"
+    restart: unless-stopped
+    networks:
+      - basic_rag
     volumes:
       - chroma_data:/chroma/data
     environment:
-      - IS_PERSISTENT=TRUE
-      - PERSIST_DIRECTORY=/chroma/data
-    restart: always
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /chroma/data
 
   api:
     build: .
     container_name: basic_rag_api
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    networks:
+      - basic_rag
     ports:
-      - "8000:8000"
+      - "8002:8000"
     volumes:
       - .:/app
       - ./documents:/app/documents
@@ -35,16 +43,20 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       CHROMA_HOST: chroma
-      CHROMA_PORT: 8000
+      CHROMA_PORT: "8000"
     depends_on:
-      - redis
-      - chroma
-    restart: always
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
 
   celery_worker:
     build: .
     container_name: basic_rag_celery_worker
-    command: celery -A app.celery_app worker --loglevel=info -P solo
+    command: celery -A app.tasks.celery_app worker --loglevel=info -P solo
+    restart: unless-stopped
+    networks:
+      - basic_rag
     volumes:
       - .:/app
       - ./documents:/app/documents
@@ -53,11 +65,32 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       CHROMA_HOST: chroma
-      CHROMA_PORT: 8000
+      CHROMA_PORT: "8000"
     depends_on:
-      - redis
-      - chroma
-    restart: always
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+
+  ui:
+    build: .
+    container_name: basic_rag_ui
+    command: streamlit run frontend/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    restart: unless-stopped
+    networks:
+      - basic_rag
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      - api
+
+networks:
+  basic_rag:
+    driver: bridge
 
 volumes:
   redis_data:
