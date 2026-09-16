@@ -45,11 +45,11 @@ class DocumentSearchTool(BaseAgentTool):
             )
             formatted_docs = []
             for i, doc in enumerate(results, 1):
-                source = doc.metadata.get("source", "Unknown")
+                source = doc.metadata.get("filename") or doc.metadata.get("source", "Unknown")
                 page = doc.metadata.get("page", "N/A")
                 score = getattr(doc, "score", 0.0)
                 formatted_docs.append(
-                    f"[{i}] Document: {source} (Page {page}) [Relevance Score: {score:.2f}]\nContent: {doc.page_content}"
+                    f"[{i}] Document: {source} (Page {page}) [Relevance Score: {score:.2f}]\nContent: {doc.text}"
                 )
 
             if not formatted_docs:
