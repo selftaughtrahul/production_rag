@@ -13,6 +13,7 @@ from typing import List
 from app.api.dependencies import build_components, build_ingestion_pipeline
 from app.models.schemas import DocumentResponse, UserInDB
 from app.services.auth.dependencies import get_current_user
+from app.services.retriever.bm25_store import BM25Store
 from app.tasks.tasks import ingest_document_task
 from database.models import Document
 from database.sqlite import get_db
@@ -196,7 +197,7 @@ async def delete_document(
     db: Session = Depends(get_db),
 ):
     """
-    Delete a document and all its vector chunks.
+    Delete a document and all its vector and BM25 chunks.
     Only the owning user can delete their own documents.
     """
     if not document_id.strip():
@@ -214,6 +215,9 @@ async def delete_document(
         )
 
     vector_store.delete_document(document_id)
+    BM25Store(db_path="data/bm25.db").delete_document(
+        document_id, user_id=current_user.id
+    )
 
     row = db.scalar(
         select(Document).where(

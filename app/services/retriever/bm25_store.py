@@ -219,16 +219,15 @@ class BM25Store:
         finally:
             session.close()
 
-    def delete_document(self, document_id: str) -> int:
+    def delete_document(self, document_id: str, user_id: str | None = None) -> int:
         session = self.SessionLocal()
         try:
-            chunk_ids = list(
-                session.scalars(
-                    select(Chunk.chunk_id).where(
-                        func.json_extract(Chunk.metadata_json, "$.document_id") == document_id
-                    )
-                ).all()
+            stmt = select(Chunk.chunk_id).where(
+                func.json_extract(Chunk.metadata_json, "$.document_id") == document_id
             )
+            if user_id:
+                stmt = stmt.where(Chunk.user_id == user_id)
+            chunk_ids = list(session.scalars(stmt).all())
         finally:
             session.close()
         self.delete(chunk_ids)
