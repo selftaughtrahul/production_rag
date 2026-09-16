@@ -98,6 +98,7 @@ class RAGSubGraphNode:
         logger.info("[RAG Node] Executing internal knowledge retrieval...")
         query = state.get("query", "")
         user_id = state.get("user_id")
+        thread_id = state.get("thread_id") or ""
 
         answer = ""
         context = ""
@@ -108,8 +109,20 @@ class RAGSubGraphNode:
                     "question": query,
                     "user_id": user_id,
                     "skip_memory_persist": True,
+                    "rewritten_question": None,
+                    "documents": [],
+                    "context": "",
+                    "answer": "",
+                    "documents_relevant": False,
+                    "has_error": False,
+                    "retry_count": 0,
                 }
-                rag_result = await self.rag_graph.ainvoke(rag_input)
+                rag_config = {
+                    "configurable": {
+                        "thread_id": f"{thread_id}:rag" if thread_id else "rag",
+                    }
+                }
+                rag_result = await self.rag_graph.ainvoke(rag_input, config=rag_config)
                 answer = rag_result.get("answer") or rag_result.get("generation", "")
                 context = rag_result.get("context", "")
             except Exception as e:

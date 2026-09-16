@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 22:18`
+- Last scan: `2026-09-16 22:42`
 - Command: `python track_production.py`
-- Closed items: **10/28 (36%)**
+- Closed items: **11/28 (39%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -12,7 +12,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
 | Priority | Done | Partial | Todo | Total |
 | -------- | ---- | ------- | ---- | ----- |
-| P0 | 10 | 5 | 3 | 18 |
+| P0 | 11 | 4 | 3 | 18 |
 | P1 | 0 | 3 | 2 | 5 |
 | P2 | 0 | 0 | 2 | 2 |
 | P3 | 0 | 1 | 2 | 3 |
@@ -38,7 +38,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | ✅ | `p0-sql-ro` | Read-only SQL tool + denied tables | Tool safety | Already in sql_search.py |
 | ✅ | `p0-input-len` | Input length validation | Cheap abuse/cost cap | Already in factory.py |
 | ✅ | `p0-jwt-secret` | No insecure JWT secret default | Stolen tokens if default ships | Require JWT_SECRET_KEY; raise if missing |
-| 🟡 | `p0-thread-id` | Nested RAG ainvoke passes thread_id | Checkpoint correctness | Pass config={'configurable': {'thread_id': ...}} in RAGSubGraphNode |
+| ✅ | `p0-thread-id` | Nested RAG ainvoke passes thread_id | Checkpoint correctness | Pass config={'configurable': {'thread_id': ...}} in RAGSubGraphNode |
 | ⬜ | `p0-doc-text` | document_search uses .text | Fallback RAG tool crash | Replace page_content with doc.text |
 | 🟡 | `p0-bm25-delete` | Delete BM25 chunks with the document | Stale lexical hits after delete | Call BM25Store.delete_document in documents.py |
 | ⬜ | `p0-health` | GET /health | Load balancer / Compose probes | Add a FastAPI health route in main.py |
@@ -75,9 +75,9 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
 ## Next action
 
-Work next: **p0-thread-id — Nested RAG ainvoke passes thread_id**
+Work next: **p0-doc-text — document_search uses .text**
 
-Pass config={'configurable': {'thread_id': ...}} in RAGSubGraphNode
+Replace page_content with doc.text
 
 ---
 
