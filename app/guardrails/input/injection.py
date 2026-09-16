@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.guardrails.base import BaseInputGuardrail, GuardrailResult
-from app.guardrails.fast_checks import needs_llm_injection_check
+from app.guardrails.fast_checks import needs_llm_injection_check, provider_is_ready
 
 if TYPE_CHECKING:
     from app.guardrails.provider.nemo import NeMoProvider
@@ -14,7 +14,7 @@ class PromptInjectionGuardrail(BaseInputGuardrail):
         self.provider = provider
 
     async def check(self, query: str) -> GuardrailResult:
-        if not getattr(self.provider, "is_ready", False):
+        if not provider_is_ready(self.provider):
             return GuardrailResult(passed=True, action="allow")
         # Normal questions skip a 5–9s NeMo LLM call.
         if not needs_llm_injection_check(query):

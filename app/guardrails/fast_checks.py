@@ -1,18 +1,21 @@
 """Cheap text checks used before calling an LLM guardrail.
 
-Add phrases here when you see new jailbreak patterns in logs.
+Extend by appending phrases to the tuples below. Do not mix the two lists:
+denylist always blocks; hints only decide whether to call NeMo.
 """
 
-# Always block even when NeMo is not loaded. Keep this list tight — it is not
-# the same as INJECTION_HINTS (those only decide whether to call the LLM rail).
-JAILBREAK_DENYLIST = (
+from __future__ import annotations
+
+# High-confidence jailbreaks. Always block, even when NeMo is not loaded.
+JAILBREAK_DENYLIST: tuple[str, ...] = (
     "ignore previous",
     "ignore all instructions",
     "ignore your instructions",
     "act as an uncensored",
 )
 
-INJECTION_HINTS = JAILBREAK_DENYLIST + (
+# Weaker signals. Skip the LLM rail when none of these appear.
+INJECTION_HINTS: tuple[str, ...] = JAILBREAK_DENYLIST + (
     "you are now",
     "system prompt",
     "developer mode",
@@ -24,13 +27,21 @@ INJECTION_HINTS = JAILBREAK_DENYLIST + (
 )
 
 
+def _contains_any(query: str, phrases: tuple[str, ...]) -> bool:
+    text = (query or "").lower()
+    return any(phrase in text for phrase in phrases)
+
+
 def is_jailbreak_denylist(query: str) -> bool:
     """True for high-confidence jailbreak phrases that never need an LLM rail."""
-    text = (query or "").lower()
-    return any(phrase in text for phrase in JAILBREAK_DENYLIST)
+    return _contains_any(query, JAILBREAK_DENYLIST)
 
 
 def needs_llm_injection_check(query: str) -> bool:
     """True only when the text looks like a jailbreak. Normal questions skip NeMo."""
-    text = (query or "").lower()
-    return any(hint in text for hint in INJECTION_HINTS)
+    return _contains_any(query, INJECTION_HINTS)
+
+
+def provider_is_ready(provider: object | None) -> bool:
+    """Shared ready check for NeMo / Llama Guard / Presidio-style providers."""
+    return provider is not None and bool(getattr(provider, "is_ready", False))
