@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from sqlalchemy import create_engine
 
 from app.tools.sql_search import SQLQueryTool, _referenced_tables
 
 
 def _tool() -> SQLQueryTool:
-    return SQLQueryTool(db_engine=MagicMock())
+    return SQLQueryTool(db_engine=create_engine("sqlite:///:memory:"))
 
 
 def test_select_is_read_only() -> None:

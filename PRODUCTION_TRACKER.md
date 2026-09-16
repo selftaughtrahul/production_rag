@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 23:03`
+- Last scan: `2026-09-16 23:11`
 - Command: `python track_production.py`
-- Closed items: **21/28 (75%)**
+- Closed items: **22/28 (79%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -13,7 +13,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | Priority | Done | Partial | Todo | Total |
 | -------- | ---- | ------- | ---- | ----- |
 | P0 | 16 | 1 | 1 | 18 |
-| P1 | 4 | 0 | 1 | 5 |
+| P1 | 5 | 0 | 0 | 5 |
 | P2 | 0 | 0 | 2 | 2 |
 | P3 | 1 | 1 | 1 | 3 |
 
@@ -56,7 +56,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | ✅ | `p1-pii` | Presidio PII wired | PII in prompts/responses | Instantiate PresidioProvider in factory/dependencies |
 | ✅ | `p1-sse` | True SSE token streaming | UI waits until full Claude answer | Use ClaudeService.generate_stream in query.py |
 | ✅ | `p1-eval` | Ragas/eval harness in repo | Know if RAG got better | Add evals/ with a golden set; call ragas from CI |
-| ⬜ | `p1-tests` | Automated tests | Regressions on routing/SQL/auth | Add tests/ for auth, SQL allowlist, hybrid retrieve |
+| ✅ | `p1-tests` | Automated tests | Regressions on routing/SQL/auth | Add tests/ for auth, SQL allowlist, hybrid retrieve |
 
 ## P2
 

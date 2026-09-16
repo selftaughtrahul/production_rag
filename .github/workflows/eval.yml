@@ -31,8 +31,5 @@ jobs:
         run: >
           pip install pytest==8.3.5 sqlalchemy langchain-core pydantic
           python-jose passlib argon2-cffi python-dotenv langsmith
-      - name: Routing, SQL allowlist, and auth
-        run: python -m pytest tests/test_routing.py tests/test_sql_allowlist.py tests/test_auth.py -q
-      - name: Hybrid retrieve (needs chromadb import path)
-        run: python -m pytest tests/test_hybrid_retrieve.py -q
-        continue-on-error: true
+      - name: Routing, SQL allowlist, auth, and hybrid retrieve
+        run: python -m pytest tests/ -q

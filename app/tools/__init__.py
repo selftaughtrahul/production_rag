@@ -1,8 +1,4 @@
-from app.tools.base import BaseAgentTool, ToolResult
-from app.tools.doc_search import DocumentSearchTool
-from app.tools.web_search import WebSearchTool
-from app.tools.sql_search import SQLQueryTool, SQLSchemaTool
-from app.tools.registry import ToolRegistry, build_default_tool_registry
+"""Agent tools. Import submodules directly to avoid loading unused providers."""
 
 __all__ = [
     "BaseAgentTool",

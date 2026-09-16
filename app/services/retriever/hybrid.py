@@ -15,8 +15,6 @@ from typing import Any
 from langsmith import traceable
 
 from app.services.retriever.base import Retriever
-from app.services.retriever.dense import DenseRetriever
-from app.services.retriever.bm25 import BM25Retriever
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +29,8 @@ class HybridRetriever(Retriever):
 
     def __init__(
         self,
-        dense_retriever: DenseRetriever,
-        bm25_retriever: BM25Retriever,
+        dense_retriever: Retriever,
+        bm25_retriever: Retriever,
     ) -> None:
         self.dense_retriever = dense_retriever
         self.bm25_retriever = bm25_retriever

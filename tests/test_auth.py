@@ -14,6 +14,7 @@ from app.services.auth.auth_service import (
 
 
 def test_hash_and_verify_password() -> None:
+    pytest.importorskip("argon2")
     hashed = hash_password("s3cret")
     assert hashed != "s3cret"
     assert verify_password("s3cret", hashed) is True
