@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any, Dict, List, Literal
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel, Field
@@ -12,6 +13,29 @@ from app.prompts.specialist_prompts import (
 from app.services.llm.claude import ClaudeService
 
 logger = logging.getLogger(__name__)
+
+_ORDER_CONTROL_RE = re.compile(
+    r"^(?:confirm|cancel) order act_[a-f0-9]{8}$",
+    re.IGNORECASE,
+)
+_UNRELATED_PENDING_RE = re.compile(
+    r"^(?:what|why|who|when|where|how|tell|explain|write|code|hello|hi|thanks|"
+    r"search|calculate|compute|"
+    r"show my orders?|list my orders?|get order|read (?:the )?document)",
+    re.IGNORECASE,
+)
+
+
+def _pending_turn_targets_sql(state: SupervisorState) -> bool:
+    pending = state.get("pending_order_action")
+    if not pending:
+        return False
+    query = state.get("query", "").strip()
+    if _ORDER_CONTROL_RE.fullmatch(query):
+        return True
+    if pending.get("phase") == "awaiting_confirmation":
+        return query.lower() in {"yes", "no", "approve", "confirm", "cancel"}
+    return not bool(_UNRELATED_PENDING_RE.match(query))
 
 
 class SupervisorDecision(BaseModel):
@@ -42,7 +66,7 @@ class SupervisorNode:
 
         query = state.get("query", "")
         agent_outputs: List[AgentOutput] = state.get("agent_outputs") or []
-        if state.get("pending_order_action") and not agent_outputs:
+        if _pending_turn_targets_sql(state) and not agent_outputs:
             logger.info("Pending order action routes directly to sql_agent")
             return {"next_node": "sql_agent", "iterations": iterations}
         already_ran = [

@@ -39,7 +39,6 @@ from database.order_store import (
     init_order_db,
 )
 from database.sqlite import CHECKPOINT_CONNINFO
-from database.sqlite import engine as db_engine
 
 from app.agent.multi_agent.master_graph import build_master_agent_graph
 
@@ -271,7 +270,6 @@ def get_tool_registry(
     if _tool_registry_instance is None:
         _tool_registry_instance = build_default_tool_registry(
             retriever=retriever,
-            db_engine=db_engine,
             order_repository=get_order_repository(),
         )
     return _tool_registry_instance

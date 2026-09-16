@@ -25,6 +25,7 @@ from tenacity import (
 )
 
 from app.core.exceptions import LLMUnavailableError
+from app.prompts.specialist_prompts import RAG_GENERATION_SYSTEM_V2
 
 logger = logging.getLogger(__name__)
 
@@ -215,30 +216,19 @@ class ClaudeService:
 
         self._check_client()
 
-        system_prompt = """
-You are an expert, direct, and concise AI assistant integrated with a RAG pipeline.
-
-Guidelines:
-- Your primary task is to answer the user's question using the provided Context documents.
-- If the user asks a conversational question or asks something based on the chat history (like "what is my name?"), answer naturally using the chat history and long-term memories.
-- Use long-term memories as persistent facts about the user. Prefer them over chat history when they conflict with older turns.
-- Provide a single, cohesive, well-structured answer.
-- Do NOT generate multiple responses, alternative versions, simulated dialogue, or section separators.
-- Do NOT start your response with filler phrases like "Based on the provided context:", "According to the documents:".
-- If the user asks a factual question that requires documents, but the context is empty and it's not in the chat history or memories, respond with: "I don't have enough information in the provided documents to answer this question."
-- Do not make up facts or extrapolate beyond what is stated.
-"""
-
         memories_text = "\n".join(f"- {item}" for item in (long_term_memories or [])) or "(none)"
 
-        user_prompt = f"""Long-term memories about the user:
+        user_prompt = f"""<memories>
 {memories_text}
+</memories>
 
-Context:
+<context>
 {context}
+</context>
 
-Question:
-{question}"""
+<question>
+{question}
+</question>"""
 
         messages = []
         if chat_history:
@@ -254,7 +244,7 @@ Question:
                 model=self.model,
                 max_tokens=1024,
                 temperature=0,
-                system=system_prompt,
+                system=RAG_GENERATION_SYSTEM_V2,
                 messages=messages,
             )
         except Exception as e:
@@ -287,37 +277,23 @@ Question:
         """
         self._check_client()
 
-        # ── Build system prompt ────────────────────────────────────────
-        system_prompt = """\
-You are an expert, direct, and concise AI assistant integrated with a RAG pipeline.
-
-Guidelines:
-- Answer the user's question using the provided Context documents.
-- If the user asks a conversational question (e.g. "what is my name?"), \
-answer naturally using the chat history and long-term memories.
-- Use long-term memories as persistent facts about the user.
-- Provide a single, cohesive, well-structured answer.
-- Do NOT generate multiple responses or alternative versions.
-- Do NOT start with filler like "Based on the provided context:".
-- If context is empty and the answer is not in chat history or memories, \
-respond with: "I don't have enough information in the provided documents to answer this question."
-- Do not make up facts or extrapolate beyond what is stated.
-"""
-
         # ── Build user turn ────────────────────────────────────────────
         memories_text = (
             "\n".join(f"- {item}" for item in (long_term_memories or []))
             or "(none)"
         )
 
-        user_turn = f"""Long-term memories about the user:
+        user_turn = f"""<memories>
 {memories_text}
+</memories>
 
-Context:
+<context>
 {context}
+</context>
 
-Question:
-{question}"""
+<question>
+{question}
+</question>"""
 
         # ── Assemble message list (history + current turn) ─────────────
         messages: list[dict[str, str]] = []
@@ -331,7 +307,7 @@ Question:
                 model=self.model,
                 max_tokens=1024,
                 temperature=0,
-                system=system_prompt,
+                system=RAG_GENERATION_SYSTEM_V2,
                 messages=messages,
                 timeout=_LLM_TIMEOUT_SECONDS,
             ) as stream:

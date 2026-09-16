@@ -1,6 +1,5 @@
 import logging
 from typing import Dict, List, Optional
-from sqlalchemy.engine import Engine
 
 from database.order_store import OrderRepository
 from app.services.retriever.hybrid import HybridRetriever
@@ -16,7 +15,6 @@ from app.tools.order_tools import (
 from app.tools.utility_tools import CalculatorTool, CurrentDateTimeTool
 from app.tools.web_read import WebPageReadTool
 from app.tools.web_search import WebSearchTool
-from app.tools.sql_search import SQLQueryTool, SQLSchemaTool
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +82,6 @@ class ToolRegistry:
 
 def build_default_tool_registry(
     retriever: HybridRetriever,
-    db_engine: Engine,
     order_repository: OrderRepository,
 ) -> ToolRegistry:
     """Factory creating and populating the standard ToolRegistry."""
@@ -97,12 +94,6 @@ def build_default_tool_registry(
     # 2. Live Web Search Tool (Tavily + DuckDuckGo fallback)
     web_tool = WebSearchTool()
     registry.register_tool(web_tool)
-
-    # 3. SQL Query & Schema Inspection Tools
-    sql_query_tool = SQLQueryTool(db_engine=db_engine)
-    sql_schema_tool = SQLSchemaTool(db_engine=db_engine)
-    registry.register_tool(sql_query_tool)
-    registry.register_tool(sql_schema_tool)
 
     registry.register_tool(ListUserDocumentsTool())
     registry.register_tool(WebPageReadTool())

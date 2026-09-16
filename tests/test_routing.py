@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.agent.multi_agent.route import next_agent
+from app.agent.multi_agent.supervisor import _pending_turn_targets_sql
 
 
 def test_greeting_goes_to_general() -> None:
@@ -31,3 +32,21 @@ def test_second_hop_finishes() -> None:
 
 def test_empty_query_is_general() -> None:
     assert next_agent("   ", []) == "general_agent"
+
+
+def test_unrelated_turn_can_bypass_pending_order_draft() -> None:
+    awaiting = {
+        "query": "what time is it in London?",
+        "pending_order_action": {"phase": "awaiting_confirmation"},
+    }
+    collecting = {
+        "query": "search the web for current AI news",
+        "pending_order_action": {"phase": "collecting"},
+    }
+    confirmation = {
+        "query": "confirm order act_deadbeef",
+        "pending_order_action": {"phase": "awaiting_confirmation"},
+    }
+    assert not _pending_turn_targets_sql(awaiting)
+    assert not _pending_turn_targets_sql(collecting)
+    assert _pending_turn_targets_sql(confirmation)
