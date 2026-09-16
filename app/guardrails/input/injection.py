@@ -2,28 +2,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from app.guardrails.base import BaseInputGuardrail, GuardrailResult
-from app.guardrails.fast_checks import needs_llm_injection_check, provider_is_ready
+from app.guardrails.base import BaseInputGuardrail, GuardrailResult, allow, reject
+from app.guardrails.fast_checks import nemo_injection_verdict
 
 if TYPE_CHECKING:
     from app.guardrails.provider.nemo import NeMoProvider
 
 
 class PromptInjectionGuardrail(BaseInputGuardrail):
-    def __init__(self, provider: NeMoProvider):
+    def __init__(self, provider: NeMoProvider) -> None:
         self.provider = provider
 
     async def check(self, query: str) -> GuardrailResult:
-        if not provider_is_ready(self.provider):
-            return GuardrailResult(passed=True, action="allow")
-        # Normal questions skip a 5–9s NeMo LLM call.
-        if not needs_llm_injection_check(query):
-            return GuardrailResult(passed=True, action="allow")
-        res = await self.provider.check_prompt_injection(query)
-        if not res["passed"]:
-            return GuardrailResult(
-                passed=False,
-                reason=str(res.get("reason") or "Prompt injection detected."),
-                action="block",
-            )
-        return GuardrailResult(passed=True, action="allow")
+        verdict = await nemo_injection_verdict(query, self.provider)
+        if verdict is None:
+            return allow()
+        if not verdict["passed"]:
+            return reject(str(verdict.get("reason") or "Prompt injection detected."))
+        return allow()

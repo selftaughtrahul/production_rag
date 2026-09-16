@@ -4,7 +4,7 @@ Extend by appending phrases to the tuples below. Do not mix the two lists:
 denylist always blocks; hints only decide whether to call NeMo.
 """
 
-from __future__ import annotations
+from typing import Any
 
 # High-confidence jailbreaks. Always block, even when NeMo is not loaded.
 JAILBREAK_DENYLIST: tuple[str, ...] = (
@@ -45,3 +45,13 @@ def needs_llm_injection_check(query: str) -> bool:
 def provider_is_ready(provider: object | None) -> bool:
     """Shared ready check for NeMo / Llama Guard / Presidio-style providers."""
     return provider is not None and bool(getattr(provider, "is_ready", False))
+
+
+async def nemo_injection_verdict(
+    query: str,
+    provider: Any | None,
+) -> dict[str, Any] | None:
+    """NeMo prompt-injection result, or None when the LLM rail should be skipped."""
+    if not provider_is_ready(provider) or not needs_llm_injection_check(query):
+        return None
+    return await provider.check_prompt_injection(query)

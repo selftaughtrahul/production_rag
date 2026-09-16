@@ -6,7 +6,7 @@ and append it to `_input_rails`. Do not replace an existing slot.
 
 from __future__ import annotations
 
-from app.guardrails.base import BaseInputGuardrail, GuardrailResult
+from app.guardrails.base import BaseInputGuardrail, GuardrailResult, run_input_rails
 
 
 class InputGuardrailService:
@@ -34,11 +34,4 @@ class InputGuardrailService:
         ]
 
     async def validate(self, query: str) -> GuardrailResult:
-        for name, guardrail in self._input_rails():
-            if guardrail is None:
-                continue
-            result = await guardrail.check(query)
-            if not result.passed:
-                result.metadata.setdefault("rail", name)
-                return result
-        return GuardrailResult(passed=True, action="allow")
+        return await run_input_rails(self._input_rails(), query)
