@@ -1,179 +1,217 @@
-# RAG API — Project Overview & Architecture Workflow
+# basic_rag — how the product works
 
-This document describes the **current** application: one chat pipeline (multi-agent supervisor over hybrid retrieval), JWT auth, Streamlit UI, and document ingestion. It is not a roadmap.
+This file is the operator’s map of the **current** codebase. It is not a roadmap. Chat has **one** pipeline: a LangGraph supervisor over hybrid retrieval. There is no `/query` mode switch and no second RAG path.
 
-## Stack
-
-| Layer | Technology |
-|---|---|
-| **API** | FastAPI (`main.py`) — REST + SSE on `POST /chat/` |
-| **UI** | Streamlit (`frontend/`) — login, upload, chat |
-| **Orchestration** | LangGraph master graph (`app/agent/multi_agent/`) — supervisor + specialists |
-| **RAG specialist** | Nested LangGraph CRAG graph (`app/services/rag/`) — hybrid retrieve → rerank → grade → rewrite → generate |
-| **Vector store** | ChromaDB (cosine / HNSW), persist dir `data/chroma_db` |
-| **Keyword search** | SQLite FTS5 BM25 (`data/bm25.db`) |
-| **Hybrid search** | Reciprocal Rank Fusion (RRF, `k=60`) then cross-encoder rerank |
-| **Embeddings** | HuggingFace Sentence Transformers (`sentence-transformers/all-MiniLM-L6-v2`) |
-| **Reranker** | Cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) |
-| **LLM** | Anthropic Claude (`ANTHROPIC_MODEL`, default `claude-sonnet-4-5`) |
-| **Conversation memory** | LangGraph `AsyncSqliteSaver` on `rag_database.db` (`thread_id` = `session_<uuid>`) |
-| **Long-term memory** | `MemoryExtractor` + `MemoryService` → SQLite `user_memories` |
-| **Auth users / docs** | SQLite (`users`, `documents`) via SQLAlchemy — not MySQL at runtime |
-| **Auth** | JWT Bearer (`JWT_SECRET_KEY`, bcrypt hashes) |
-| **Async ingest (optional)** | Celery + Redis when `IS_ASYNC=true` |
-| **Guardrails** | Input/output services; at runtime input validation always runs, NeMo injection when enabled and ready |
-
-There is **no** public `/query/`, `/query/hybrid`, or `/query/stream` path and **no** chat mode switch. The RAG graph is only invoked as the `rag_agent` specialist.
+Session ids are always `session_<uuid>`.
 
 ---
 
-## Project Structure
+## 1. What you are looking at
+
+A user talks to Streamlit. Streamlit calls FastAPI with a JWT. FastAPI runs a **master LangGraph**. The supervisor picks a specialist (RAG, SQL, web, or general). The RAG specialist runs a **nested CRAG graph**: dense Chroma + BM25 FTS5 → RRF → knowledge-graph boost → cross-encoder → grade → optional rewrite → context. Claude then **token-streams** the answer over SSE. Guardrails, cache, rate limits, audit logs, and optional traces wrap that turn.
+
+```mermaid
+flowchart LR
+    subgraph clients [Clients]
+        UI[Streamlit UI]
+        MCP[MCP stdio ask_rag]
+        HTTP[curl / OpenAPI]
+    end
+
+    subgraph api [FastAPI main.py]
+        Auth["/auth"]
+        Docs["/ingest /documents"]
+        Chat["POST /chat/ SSE"]
+        Ops["/health /metrics"]
+    end
+
+    subgraph graphs [LangGraph]
+        Master[Master supervisor]
+        Nested[Nested RAG CRAG]
+    end
+
+    subgraph stores [State and indexes]
+        PG[(Postgres users memories checkpoints)]
+        Chroma[(Chroma vectors)]
+        BM25[(SQLite FTS5 BM25)]
+        Redis[(Redis cache + Celery)]
+    end
+
+    UI --> Chat
+    MCP --> Chat
+    HTTP --> Auth
+    HTTP --> Docs
+    HTTP --> Chat
+    Chat --> Master
+    Master --> Nested
+    Nested --> Chroma
+    Nested --> BM25
+    Master --> PG
+    Chat --> Redis
+    Ops --> Prom[Prometheus]
+    Prom --> Graf[Grafana]
+```
+
+| Layer | What it is |
+| --- | --- |
+| Product UI | Streamlit (`frontend/`). Local `run.py` uses port **8501**. Docker Compose publishes **8002** only. |
+| API | FastAPI `main.py`. Local **8000**. Docker: internal `api:8000`, not published. |
+| Chat | `POST /chat/` and `POST /chat` — SSE `token` then `done` (or `error`). |
+| Orchestration | `app/agent/multi_agent/` master graph + nested `app/services/rag/` graph. |
+| LLM | Anthropic Claude (`ClaudeService`), timeout + retry. Streaming on the chat path. |
+| Dense search | Chroma cosine/HNSW, tenant filter `{user_id}`. |
+| Lexical search | SQLite FTS5 BM25 in `data/bm25.db` (not the app DB). |
+| Fusion | RRF (`k=60`) then `KnowledgeGraph` token co-occurrence boost then cross-encoder. |
+| App state | Postgres via `DATABASE_URL` (`database/sqlite.py` name is historical). Users, documents, `user_memories`, LangGraph checkpoints. |
+| Auth | JWT Bearer, secret required (≥32 chars). |
+| Ingest | Sync pipeline, or Celery when `IS_ASYNC=true`. |
+
+---
+
+## 2. Layout (paths that actually exist)
 
 ```
 basic_rag/
-├── main.py                              # FastAPI app, lifespan (init_db + HF token + model warmup)
-├── run.py                               # Starts uvicorn + Streamlit together
-├── PROJECT_WORKFLOW.md                  # This file
+├── main.py                 FastAPI: routers, lifespan, /health, /metrics
+├── run.py                  Local: uvicorn + Streamlit together
+├── docker-compose.yml      redis, chroma, postgres, api, celery, ui, prometheus, grafana
+├── track_production.py     Regenerates PRODUCTION_TRACKER.md
 ├── database/
-│   ├── sqlite.py                        # Engine, SessionLocal, init_db(), get_db()
-│   └── models.py                        # User, Document, MemoryRecord
-├── frontend/
-│   ├── app.py                           # Streamlit entry
-│   ├── api_client.py                    # HTTP client (JWT + POST /chat/ SSE)
-│   └── components/
-│       ├── auth_ui.py
-│       ├── chat_ui.py
-│       └── sidebar_ui.py
-└── app/
-    ├── api/
-    │   ├── auth.py                      # POST /auth/register, /auth/login, GET /auth/me
-    │   ├── documents.py                 # POST /ingest, GET /documents, download, DELETE
-    │   ├── query.py                     # POST /chat/, GET /chat/conversations[/{id}]
-    │   ├── session_access.py            # Checkpoint thread ownership
-    │   └── dependencies.py              # Graphs, retriever, LLM, tools, checkpointer
-    ├── agent/multi_agent/
-    │   ├── master_graph.py              # Supervisor StateGraph
-    │   ├── supervisor.py                # Route + synthesize
-    │   ├── route.py                     # Cheap (non-LLM) first-pass routing
-    │   ├── nodes.py                     # Guardrails, memory, RAG/SQL/web/general
-    │   └── state.py                     # SupervisorState
-    ├── core/
-    │   ├── config.py                    # Settings from .env
-    │   ├── exceptions.py
-    │   ├── logger.py
-    │   └── device.py                    # Torch device for embeddings/reranker
-    ├── guardrails/
-    │   ├── factory.py                   # Wires optional providers into services
-    │   ├── input_service.py / output_service.py
-    │   ├── fast_checks.py               # Skip NeMo on ordinary questions
-    │   ├── nemo_config/                 # NeMo rails config when ENABLE_NEMO=true
-    │   ├── provider/                    # nemo.py, presidio.py, llama_guard.py
-    │   ├── input/                       # validation, injection, pii, safety
-    │   └── output/                      # schema, grounding, pii, safety
-    ├── memory/
-    │   ├── extractor.py                 # ADD / UPDATE / NOOP
-    │   ├── persist.py                   # Background persist after a turn
-    │   ├── service.py
-    │   └── models.py
-    ├── models/schemas.py                # ChatRequest, auth, documents
-    ├── prompts/memory_prompts.py
-    ├── tasks/                           # Celery ingest (used only if IS_ASYNC)
-    ├── tools/
-    │   ├── registry.py                  # document_search, web_search, sql_*
-    │   ├── doc_search.py
-    │   ├── web_search.py                # Tavily if TAVILY_API_KEY else DuckDuckGo
-    │   └── sql_search.py                # Read-only SQLite schema + SELECT
-    └── services/
-        ├── auth/
-        ├── ingestion/                   # loader, cleaner, chunker, embedder, pipeline
-        ├── llm/claude.py
-        ├── rag/                         # Nested CRAG graph used by rag_agent
-        ├── retriever/                   # dense, bm25, hybrid RRF, reranker, context
-        └── vectorstore/chroma.py
+│   ├── sqlite.py           Postgres engine + init_db (SQLAlchemy postgresql+psycopg)
+│   └── models.py           User, Document, MemoryRecord
+├── frontend/               Streamlit: login, ingest, chat SSE client
+├── evals/                  Golden set, Ragas, DeepEval stand-in, MLflow log
+├── observability/          Prometheus scrape + Grafana dashboard JSON
+├── app/
+│   ├── api/                HTTP: auth, documents, chat, session_access, dependencies
+│   ├── agent/multi_agent/  Master graph, supervisor, specialists
+│   ├── services/rag/       Nested CRAG graph
+│   ├── services/retriever/ dense, bm25, hybrid, knowledge_graph, reranker
+│   ├── services/llm/       Claude
+│   ├── services/cache/     Redis answer cache
+│   ├── guardrails/         Input/output rails, NeMo, Presidio, jailbreak
+│   ├── memory/             Long-term extract + persist
+│   ├── tools/              document_search, web_search, sql_*, invoke_tool
+│   ├── mcp/server.py       MCP stdio: health, ask_rag
+│   ├── core/               config, logger, audit, metrics, rate_limit, langfuse_tracer
+│   └── tasks/              Celery ingest
 ```
 
 ---
 
-## Chat API behaviour
+## 3. How a chat turn runs (depth)
 
-### `POST /chat/` (also `POST /chat`)
+```mermaid
+sequenceDiagram
+    participant U as Streamlit / MCP / client
+    participant API as FastAPI POST /chat/
+    participant RL as SlowAPI
+    participant Cache as Redis
+    participant G as Master LangGraph
+    participant RAG as Nested RAG graph
+    participant LLM as Claude generate_stream
+    participant Rails as Output guardrails
+    participant Mem as Postgres memories
 
-JWT required. Body: `{ "question": "...", "session_id": "session_<uuid>" | null }`.
-
-1. Empty question → HTTP 400.
-2. Existing `session_id` must belong to the caller (`ensure_session_owner`); otherwise 404.
-3. Missing `session_id` → new id `session_<uuid>`.
-4. Response is **SSE** (`text/event-stream`):
-   - immediate `: keepalive` so the UI is not stuck on a cold start
-   - `data: {"type": "token", "content": "<full answer>"}` — one event with the completed answer (not token-by-token)
-   - `data: {"type": "done", "session_id", "question", "answer", "iterations", "agent_trajectory", "guardrail_metadata"}`
-   - or `data: {"type": "error", "error": "..."}`
-
-Graph invoke caps: `iterations=0`, `max_iterations=2`.
-
-### Conversations
-
+    U->>API: JWT + question + optional session_id
+    API->>RL: 10/minute chat, 60/minute default
+    API->>API: ensure_session_owner / new session_uuid
+    API->>Cache: rag:answer:{user_id}:{sha256}
+    alt cache hit
+        Cache-->>U: SSE token + done
+    else miss
+        API->>G: ainvoke max_iterations=2
+        G->>G: validate_input then load_memory
+        G->>G: supervisor routes specialist
+        opt rag_agent
+            G->>RAG: ainvoke skip_generate thread_id session:rag
+            RAG-->>G: context chunks
+        end
+        G->>G: synthesize then validate_output then save_memory
+        G-->>API: trajectory + memories
+        API->>LLM: stream tokens from context
+        LLM-->>U: SSE type=token (many)
+        API->>Rails: grounding + PII
+        API->>Cache: SETEX
+        API-->>U: SSE type=done
+        API->>Mem: background persist_from_turn
+    end
 ```
-GET /chat/conversations              → session ids owned by the JWT user
-GET /chat/conversations/{session_id} → messages from the LangGraph checkpoint
-```
 
-History is read with `SqliteSaver` from `rag_database.db` (`chat_history` or `messages` channel).
+1. **Auth.** `Authorization: Bearer <jwt>`. Missing/invalid → 401. Rate limit exceeded → 429.
+2. **Session.** Empty question → 400. If `session_id` exists and belongs to another user → 404. Else reuse or mint `session_<uuid>`.
+3. **Keepalive.** First SSE line is `: keepalive` so the UI is not stuck while models load.
+4. **Cache.** Redis key `rag:answer:{user_id}:{sha256(normalized question)}`. Hit skips the graphs (fail-open if Redis is down).
+5. **Master graph** (`get_master_agent_graph`, compiled once). Checkpointer is `AsyncPostgresSaver` on `DATABASE_URL`. `thread_id` is the session id. Metadata includes `user_id` for ownership.
+6. **Input rails.** Length cap 10k. Jailbreak denylist always. NeMo injection when enabled and ready. Presidio on input when spaCy loads.
+7. **Long-term memory load.** Up to 10 `user_memories` rows for this `user_id`.
+8. **Supervisor.** Cheap keyword router first; LLM `agenerate_structured(SupervisorDecision)` if ambiguous. After one specialist this turn, next hop is `FINISH`. Cap `max_iterations=2`.
+9. **RAG specialist.** Nested graph with `skip_generate=True` and `skip_memory_persist=True`, `thread_id="{session}:rag"` so checkpoints do not collide. Retrieve is **pre-filtered** by `user_id`. Fallback tool: `document_search`.
+10. **SQL / web / general.** Read-only SQL (denied tables include `users`, `user_memories`, checkpoints). Web: Tavily if `TAVILY_API_KEY` else DuckDuckGo. General: Claude + memories. Tools go through `invoke_tool` (audit + `requires_approval` for future write tools).
+11. **Synthesize** then **output rails** on the supervisor answer; chat then **re-generates** with `generate_stream` so the UI sees tokens. Grounding = token overlap vs specialist context. Presidio may anonymize.
+12. **SSE `done`.** `session_id`, question, answer, iterations, `agent_trajectory`, `guardrail_metadata`.
+13. **Save memory.** Background thread extracts ADD/UPDATE/IGNORE (`semantic` / `episodic` allowed) into Postgres.
+14. **Audit / metrics / traces.** `audit_event` (no raw PII). `inc_chat(ok|cache|blocked|error)`. LangSmith if tracing env is set. Langfuse if keys are set.
+
+SSE event shapes:
+
+| `type` | Meaning |
+| --- | --- |
+| `token` | Incremental Claude text (`content`) |
+| `done` | Full payload; UI stores `session_id` |
+| `error` | User-visible failure or safety block |
 
 ---
 
-## Master graph (the only chat pipeline)
+## 4. Master graph (only chat pipeline)
+
+Compiled in `build_master_agent_graph`. Specialists always return to the supervisor so it can `FINISH`.
 
 ```mermaid
 flowchart TD
-    START([START]) --> validate_input[validate_input]
-    validate_input -->|blocked| error_handler[error_handler]
-    validate_input -->|continue| load_memory[load_memory]
-    load_memory --> supervisor[supervisor]
+    START([START]) --> validate_input
+    validate_input -->|blocked| error_handler
+    validate_input -->|continue| load_memory
+    load_memory --> supervisor
 
-    supervisor -->|rag_agent| rag_agent[rag_agent]
-    supervisor -->|sql_agent| sql_agent[sql_agent]
-    supervisor -->|web_agent| web_agent[web_agent]
-    supervisor -->|general_agent| general_agent[general_agent]
-    supervisor -->|FINISH| synthesize[synthesize]
+    supervisor -->|rag_agent| rag_agent
+    supervisor -->|sql_agent| sql_agent
+    supervisor -->|web_agent| web_agent
+    supervisor -->|general_agent| general_agent
+    supervisor -->|FINISH| synthesize
 
     rag_agent --> supervisor
     sql_agent --> supervisor
     web_agent --> supervisor
     general_agent --> supervisor
 
-    synthesize --> validate_output[validate_output]
-    validate_output -->|continue| save_memory[save_memory]
+    synthesize --> validate_output
+    validate_output -->|continue| save_memory
     validate_output -->|blocked| error_handler
     save_memory --> END([END])
     error_handler --> END
 ```
 
-### Routing
+| Node | Role |
+| --- | --- |
+| `validate_input` | Length, jailbreak, optional NeMo, optional Presidio |
+| `load_memory` | Postgres long-term facts |
+| `supervisor` | Route + `synthesize` |
+| `rag_agent` | Nested hybrid CRAG |
+| `sql_agent` | Schema → SELECT → summary |
+| `web_agent` | Live search then grounded summary |
+| `general_agent` | Direct Claude |
+| `validate_output` | Grounding + PII on supervisor text |
+| `save_memory` | Async extract/persist |
+| `error_handler` | Safe refusal |
 
-1. Each turn clears prior specialist outputs (`__reset__`) so the previous answer cannot leak.
-2. `route.next_agent()` runs first:
-   - If a specialist already ran this turn → `FINISH`.
-   - Keyword hints pick `rag_agent` / `sql_agent` / `web_agent`.
-   - Ambiguous multi-hint queries return `None` → LLM structured `SupervisorDecision`.
-   - Otherwise `general_agent`.
-3. After `max_iterations`, supervisor forces `FINISH`.
-4. `synthesize`: if exactly one specialist returned text, that text is the answer; otherwise Claude merges observations.
-
-### Specialists
-
-| Node | What it does |
-|---|---|
-| **rag_agent** | Nested hybrid CRAG graph (`skip_memory_persist=True`). Fallback: `document_search` tool. Retrieval is filtered by `user_id`. |
-| **sql_agent** | `sql_db_schema` → Claude writes a SELECT → `sql_db_query` → summary |
-| **web_agent** | `web_search` then Claude answers from those results only |
-| **general_agent** | Direct Claude, with loaded long-term facts in the system prompt |
+There is **no** public `/query/hybrid`. The nested RAG graph is only `rag_agent`.
 
 ---
 
-## Nested RAG graph (`rag_agent` only)
+## 5. Nested RAG graph (`rag_agent`)
 
-Hybrid retriever: dense (Chroma, cosine) + BM25 FTS5 → RRF (`k=60`) → cross-encoder → document grading → optional query rewrite (retry cap in edges) → context → Claude.
+`build_rag_graph` in `app/services/rag/graph.py`. Under the master, generate is skipped so FastAPI owns streaming.
 
 ```mermaid
 flowchart TD
@@ -185,7 +223,7 @@ flowchart TD
     retrieve -->|fallback| build_context
     retrieve -->|continue| reranker
     reranker --> grade_documents
-    grade_documents -->|rewrite| rewrite
+    grade_documents -->|rewrite if empty retrieve| rewrite
     grade_documents -->|build_context| build_context
     rewrite --> retrieve
     build_context --> generate
@@ -197,107 +235,281 @@ flowchart TD
     error_handler --> END
 ```
 
-When nested under the master agent, `skip_memory_persist` skips RAG-level fact extraction; the master `save_memory` node persists once.
+Retrieve internals:
 
----
-
-## Guardrails (runtime wiring)
-
-Code supports validation, NeMo injection, Presidio PII, Llama Guard, schema, and grounding.
-
-**What `dependencies.py` actually wires today:**
-
-- **Input:** `InputValidationGuardrail` (max 10k chars) always. `PromptInjectionGuardrail` only if `ENABLE_NEMO=true` and `NeMoProvider.is_ready`. Presidio and Llama Guard are **not** passed in, so those input checks are skipped.
-- **Output:** `build_output_guardrails()` is called with no providers, so schema / grounding / PII / safety output checks are **skipped** unless you pass providers later.
-
-NeMo injection uses `needs_llm_injection_check` so ordinary questions do not pay a NeMo LLM round-trip.
-
----
-
-## Other HTTP flows
-
-### Auth
-
-```
-POST /auth/register   JSON {username, email, password} → TokenResponse
-POST /auth/login      OAuth2 form: username = email, password
-GET  /auth/me         JWT → UserInDB
+```mermaid
+flowchart LR
+    Q[Query + user_id filter] --> D[Dense Chroma]
+    Q --> B[BM25 FTS5]
+    D --> RRF[RRF k=60]
+    B --> RRF
+    RRF --> KG[KnowledgeGraph boost]
+    KG --> CE[Cross-encoder top_k]
+    CE --> CTX[Context builder]
 ```
 
-Users live in SQLite `users`. `Settings` still has unused MySQL fields.
+Rewrite only runs when retrieve returned **no** documents and `retry_count < 1` (avoids a 5s rewrite on every weak hit). Rerank failures keep fused order.
 
-### Documents
+---
 
-Uploads are stored under `documents/{user_id}/{document_id}{ext}`. Chunks get `user_id` / `document_id` / `filename` metadata.
+## 6. Ingest graph (documents)
 
+```mermaid
+flowchart TD
+    Upload[POST /ingest] --> Disk[documents/user_id/doc_id.ext]
+    Disk --> Row[Postgres documents row]
+    Row --> Sync{IS_ASYNC}
+    Sync -->|false| Pipe[IngestionPipeline]
+    Sync -->|true| Celery[Celery worker]
+    Celery --> Pipe
+    Pipe --> Load[Loader txt pdf md csv json]
+    Load --> Clean[Cleaner]
+    Clean --> Chunk[Recursive chunk 1000/200]
+    Chunk --> Embed[Sentence transformer]
+    Embed --> Chroma[Chroma upsert + user_id metadata]
+    Chunk --> FTS[BM25Store data/bm25.db]
+    Delete[DELETE /documents/id] --> ChromaDel[Delete vectors]
+    Delete --> BM25Del[Delete FTS rows]
+    Delete --> FileDel[Delete file + row]
 ```
-POST /ingest                         sync pipeline, or Celery if IS_ASYNC=true
-GET  /tasks/{task_id}                Celery status (async only)
-GET  /documents                      list current user's rows
-GET  /documents/download/{id}        original file
-DELETE /documents/{id}               Chroma chunks + SQLite row + file
+
+---
+
+## 7. Compose topology (Docker)
+
+Public product port is **8002** (UI). API is only on the Docker network. Grafana/Prometheus bind **loopback** so they are not on the internet.
+
+```mermaid
+flowchart TB
+    User((User)) -->|8002| UI[ui Streamlit]
+    UI -->|http://api:8000| API[api uvicorn]
+    API --> PG[(postgres)]
+    API --> RD[(redis)]
+    API --> CH[(chroma)]
+    CW[celery_worker] --> PG
+    CW --> RD
+    CW --> CH
+    Prom[prometheus :9090 loopback] -->|/metrics| API
+    Graf[grafana :3000 loopback] --> Prom
 ```
 
-Loader extensions: `.txt`, `.pdf`, `.md`, `.csv`, `.json`. Chunking: LangChain recursive (`CHUNK_SIZE=1000`, `CHUNK_OVERLAP=200`).
+---
+
+## 8. All HTTP endpoints
+
+OpenAPI: `http://localhost:8000/docs` (local) or via the API container internally. JWT: header `Authorization: Bearer <access_token>` except register/login/health/metrics.
+
+### Ops (no JWT)
+
+| Method | Path | What you get |
+| --- | --- | --- |
+| GET | `/health` | `{"status":"ok"}` for load balancers / Compose |
+| GET | `/metrics` | Prometheus text: `rag_chat_requests_total{outcome=...}` |
+| GET | `/docs` | Swagger UI |
+| GET | `/redoc` | ReDoc |
+| GET | `/openapi.json` | Schema |
+
+### Auth (`app/api/auth.py`, prefix `/auth`)
+
+| Method | Path | Auth | Body / notes |
+| --- | --- | --- | --- |
+| POST | `/auth/register` | no | JSON `{username, email, password}` → 201 `TokenResponse` |
+| POST | `/auth/login` | no | **OAuth2 form**: `username` = **email**, `password` |
+| GET | `/auth/me` | JWT | `UserInDB` |
+
+### Chat (`app/api/query.py`, prefix `/chat`)
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/chat/` | JWT | Same handler as `/chat`. Body `ChatRequest`: `question`, optional `session_id`. SSE. Limit `RATE_LIMIT_CHAT` (default 10/minute). |
+| POST | `/chat` | JWT | Identical |
+| GET | `/chat/conversations` | JWT | Session ids this user owns (checkpoint metadata `user_id`) |
+| GET | `/chat/conversations/{session_id}` | JWT | Messages from `PostgresSaver` (`chat_history` or `messages`) |
+
+### Documents (`app/api/documents.py`, no prefix)
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/ingest` | JWT | Multipart file. Sync pipeline or Celery. |
+| GET | `/tasks/{task_id}` | JWT | Celery status when async |
+| GET | `/documents` | JWT | Current user’s rows |
+| GET | `/documents/download/{document_id}` | JWT | Original file |
+| DELETE | `/documents/{document_id}` | JWT | Chroma + BM25 + file + row |
+
+### MCP (not HTTP)
+
+`python -m app.mcp.server` — JSON-RPC stdio tools `health` and `ask_rag` (HTTP POST `/chat/` with `MCP_JWT` and `API_BASE_URL`).
 
 ---
 
-## Streamlit UX
+## 9. Guardrails (what is wired)
 
-1. Unauthenticated → register / login.
-2. Authenticated → sidebar (sessions, logout, ingest) + chat.
-3. Chat calls `POST /chat/` with Bearer JWT and the current `session_id`.
-4. Session ids stay `session_<uuid>` from the `done` event.
+`dependencies.py` builds both input and output services for the **master** graph and nested RAG.
 
----
-
-## Environment variables (`.env`)
-
-| Key | Role | Typical / default |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Claude | required for generation |
-| `ANTHROPIC_MODEL` | Claude model id | `claude-sonnet-4-5` |
-| `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` | Hugging Face downloads | optional |
-| `EMBEDDING_MODEL` | Sentence transformer | `sentence-transformers/all-MiniLM-L6-v2` |
-| `EMBEDDING_DEVICE` | Torch device | auto via `device.py` |
-| `RERANKER_MODEL` | Cross-encoder | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| `CHROMA_PERSIST_DIRECTORY` | Local Chroma | `data/chroma_db` |
-| `CHROMA_HOST` / `CHROMA_PORT` | Remote Chroma if set | unset → persistent client |
-| `JWT_SECRET_KEY` | Token signing | required in production |
-| `JWT_ALGORITHM` | | `HS256` |
-| `JWT_EXPIRE_MINUTES` | | `60` |
-| `DENSE_TOP_K` / `BM25_TOP_K` / `FUSION_TOP_K` | Retrieve sizes | `20` |
-| `RERANK_TOP_K` | After rerank | `5` |
-| `CHUNK_SIZE` / `CHUNK_OVERLAP` | | `1000` / `200` |
-| `IS_ASYNC` | Celery ingest | `false` |
-| `REDIS_URL` | Celery broker/backend | `redis://localhost:6379/0` |
-| `ENABLE_NEMO` | Input injection rails | `true` |
-| `NEMO_CONFIG_PATH` | | `app/guardrails/nemo_config` |
-| `TAVILY_API_KEY` | Web search preferred | optional (else DuckDuckGo) |
-| `LANGSMITH_*` | Tracing | optional |
-
-SQLite app DB path is fixed: `rag_database.db`. BM25 index: `data/bm25.db`.
+| Rail | Wired? |
+| --- | --- |
+| Input length 10k | Yes |
+| Jailbreak denylist | Yes (`JailbreakGuardrail`) |
+| NeMo prompt injection | If `ENABLE_NEMO=true` and rails load; fail-closed on NeMo errors |
+| Presidio PII in + out | If spaCy/Presidio import |
+| Output grounding | Token overlap vs context (refusals score as grounded) |
+| Output PII anonymize | If Presidio ready |
+| Llama Guard | Only if you pass a provider (not constructed today) |
+| Output JSON schema on chat | Off (free-form answers). Supervisor routing uses Pydantic structured output |
 
 ---
 
-## Running locally
+## 10. Memory
+
+| Kind | Where | How to see it |
+| --- | --- | --- |
+| Short-term / conversation state | LangGraph checkpoints in Postgres, `thread_id` = session | `GET /chat/conversations/{id}`, LangSmith traces |
+| Long-term | `user_memories` | Loaded each turn; extractor after `done` |
+| Semantic / episodic | `memory_type` on those rows | Extractor JSON |
+| Answer cache | Redis | Not conversation memory; same question replay |
+
+---
+
+## 11. How to run
+
+### Prerequisites
+
+- Python 3.11+ (Compose image is 3.13).
+- `.env` with at least `JWT_SECRET_KEY` (32+ chars) and `ANTHROPIC_API_KEY` for answers.
+- Postgres for app state. Local default `postgresql://rag:rag@localhost:5432/rag`. BM25 stays `data/bm25.db`.
+
+### Local API + UI (`run.py`)
 
 ```bash
 pip install -r requirements.txt
-
-# Optional: NeMo / spaCy if you enable those providers
-# python -m spacy download en_core_web_sm
-
-# API + UI
+# Postgres must be up (Compose postgres service or local install)
 python run.py
-# API  http://localhost:8000  (docs: /docs)
-# UI   http://localhost:8501
+```
 
-# Or separately:
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+| URL | What |
+| --- | --- |
+| http://localhost:8000/docs | All endpoints |
+| http://localhost:8000/health | Probe |
+| http://localhost:8000/metrics | Counters |
+| http://localhost:8501 | Streamlit |
+
+Separate processes:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
 streamlit run frontend/app.py
-
-# Async ingest only
-# redis-server
+# Celery ingest:
 # celery -A app.tasks.celery_app worker --loglevel=info
 ```
+
+`python run.py --no-reload` matches production uvicorn (no `--reload`).
+
+### Docker (production-shaped)
+
+```bash
+docker compose up --build
+```
+
+| URL | What |
+| --- | --- |
+| http://localhost:8002 | Streamlit (talks to `http://api:8000`) |
+| http://127.0.0.1:9090 | Prometheus (host loopback) |
+| http://127.0.0.1:3000 | Grafana (admin / `GRAFANA_ADMIN_PASSWORD` or `admin`) |
+
+API is **not** published; use the UI or `docker compose exec api curl -s http://127.0.0.1:8000/health`.
+
+### Evals
+
+```bash
+python evals/run_eval.py --offline
+python evals/run_eval.py --with-ragas          # needs ANTHROPIC_API_KEY
+python evals/run_eval.py --offline --with-deepeval
+# MLflow: set MLFLOW_TRACKING_URI then run eval
+python track_production.py                     # refresh PRODUCTION_TRACKER.md
+```
+
+### MCP (Cursor)
+
+Command: `python -m app.mcp.server`. Env: `API_BASE_URL`, `MCP_JWT` (same JWT as `/auth/login`).
+
+---
+
+## 12. How to *see* logs, graphs, traces
+
+### JSON application logs
+
+`setup_logger()` in `main.py` writes:
+
+- Console (JSON)
+- `logs/rag.log` (rotating)
+- `logs/error.log` (errors only)
+
+Fields include `event`, `session_id`, `user_id`, `data` (audit: `chat.done`, `chat.blocked`, `tool.call`). Set `LOG_DIR` to change the folder. Docker: logs volume is the project `logs/` if the bind mount includes it (`.:/app`).
+
+### LangGraph **structure** (this file)
+
+The mermaid charts above **are** the graph. LangGraph does not host a public UI in this repo.
+
+### LangGraph **runs** (LangSmith)
+
+1. Set `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`, optional `LANGSMITH_PROJECT`.
+2. Restart API (`_configure_langsmith` sets `LANGCHAIN_TRACING_V2`).
+3. Open [LangSmith](https://smith.langchain.com) → project → runs named `chat`. Nested RAG is a child run (`thread_id` `session_…:rag`).
+
+### Prometheus
+
+- Scrape: `GET /metrics`
+- UI (Compose): http://127.0.0.1:9090 → Graph → query `rag_chat_requests_total`
+
+### Grafana
+
+- http://127.0.0.1:3000 (Compose)
+- Provisioned datasource **Prometheus**, dashboard **RAG API** (`observability/grafana/dashboards/rag-api.json`)
+- Panel: chat requests by `outcome` (`ok`, `cache`, `blocked`, `error`)
+
+### Langfuse (optional)
+
+Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, optional `LANGFUSE_HOST`. Chat outcomes are traced **without** prompt/answer PII. If the package or keys are missing, the API continues.
+
+### Streamlit
+
+Login → sidebar sessions + ingest → chat. Tokens appear as they stream. Session id comes from the `done` event.
+
+---
+
+## 13. Environment (`.env`)
+
+Never commit secrets. Typical keys:
+
+| Key | Role |
+| --- | --- |
+| `JWT_SECRET_KEY` | Required, ≥32 characters |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Claude |
+| `DATABASE_URL` | Postgres (`postgresql://…`); SQLAlchemy uses `postgresql+psycopg://` |
+| `REDIS_URL` | Cache + Celery |
+| `CHROMA_HOST` / `CHROMA_PORT` / `CHROMA_PERSIST_DIRECTORY` | Vectors |
+| `IS_ASYNC` | Celery ingest |
+| `ENABLE_NEMO` / `NEMO_CONFIG_PATH` | Injection rails |
+| `RATE_LIMIT_DEFAULT` / `RATE_LIMIT_CHAT` | SlowAPI |
+| `RESPONSE_CACHE_TTL_SECONDS` | Redis TTL |
+| `DENSE_TOP_K` / `BM25_TOP_K` / `RERANK_TOP_K` / `CHUNK_*` | Retrieval |
+| `HF_TOKEN` | Hugging Face downloads |
+| `TAVILY_API_KEY` | Preferred web search |
+| `LANGSMITH_*` | Tracing |
+| `LANGFUSE_*` | Optional traces |
+| `MLFLOW_TRACKING_URI` | Eval experiment log |
+| `API_BASE_URL` | Streamlit / MCP → API |
+| `MCP_JWT` | MCP `ask_rag` |
+| `GRAFANA_ADMIN_PASSWORD` | Compose Grafana |
+
+Settings still lists unused MySQL fields; runtime identity is Postgres `users`.
+
+---
+
+## 14. Non-negotiables
+
+- Chat = `POST /chat/` SSE `token` / `done` only.
+- One supervisor + hybrid RAG specialist. No basic-RAG toggle.
+- Sessions = `session_<uuid>`.
+- Retrieval tenant filter happens **before** search, not after.
+- Product UI in Docker is port **8002**; local `run.py` UI is **8501**.
