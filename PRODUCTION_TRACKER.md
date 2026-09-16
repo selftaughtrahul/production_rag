@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 22:52`
+- Last scan: `2026-09-16 22:56`
 - Command: `python track_production.py`
-- Closed items: **16/28 (57%)**
+- Closed items: **18/28 (64%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -13,7 +13,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | Priority | Done | Partial | Todo | Total |
 | -------- | ---- | ------- | ---- | ----- |
 | P0 | 16 | 1 | 1 | 18 |
-| P1 | 0 | 3 | 2 | 5 |
+| P1 | 2 | 1 | 2 | 5 |
 | P2 | 0 | 0 | 2 | 2 |
 | P3 | 0 | 1 | 2 | 3 |
 
@@ -52,8 +52,8 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
 | Status | ID | Item | Why | How to close |
 | ------ | -- | ---- | --- | ------------ |
-| 🟡 | `p1-output-rails` | Output guardrails actually constructed | Hallucination/PII at the exit door | Pass providers into build_output_guardrails from dependencies.py |
-| 🟡 | `p1-pii` | Presidio PII wired | PII in prompts/responses | Instantiate PresidioProvider in factory/dependencies |
+| ✅ | `p1-output-rails` | Output guardrails actually constructed | Hallucination/PII at the exit door | Pass providers into build_output_guardrails from dependencies.py |
+| ✅ | `p1-pii` | Presidio PII wired | PII in prompts/responses | Instantiate PresidioProvider in factory/dependencies |
 | 🟡 | `p1-sse` | True SSE token streaming | UI waits until full Claude answer | Use ClaudeService.generate_stream in query.py |
 | ⬜ | `p1-eval` | Ragas/eval harness in repo | Know if RAG got better | Add evals/ with a golden set; call ragas from CI |
 | ⬜ | `p1-tests` | Automated tests | Regressions on routing/SQL/auth | Add tests/ for auth, SQL allowlist, hybrid retrieve |

@@ -1,8 +1,35 @@
 from app.guardrails.base import BaseOutputGuardrail, GuardrailResult
 
+_REFUSAL_MARKERS = (
+    "don't have enough information",
+    "do not have enough information",
+    "i don't know",
+)
+
+
+def _tokens(text: str) -> set[str]:
+    words = [w.lower() for w in (text or "").split() if len(w) > 2]
+    return set(words)
+
+
+class TokenOverlapGroundingEvaluator:
+    """Lexical overlap between the answer and retrieved context. No extra model."""
+
+    async def evaluate(self, response: str, context: str) -> float:
+        lowered = (response or "").lower()
+        if any(marker in lowered for marker in _REFUSAL_MARKERS):
+            return 1.0
+        answer = _tokens(response)
+        ctx = _tokens(context)
+        if not answer:
+            return 1.0
+        if not ctx:
+            return 0.0
+        return len(answer & ctx) / len(answer)
+
 
 class GroundingGuardrail(BaseOutputGuardrail):
-    def __init__(self, evaluator=None, threshold: float = 0.7):
+    def __init__(self, evaluator=None, threshold: float = 0.15):
         self.evaluator = evaluator
         self.threshold = threshold
 

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Optional
@@ -14,6 +15,8 @@ from app.guardrails.factory import (
     build_input_guardrails,
     build_output_guardrails,
 )
+from app.guardrails.output.grounding import TokenOverlapGroundingEvaluator
+from app.guardrails.output_service import OutputGuardrailService
 from app.services.ingestion.chunker import ChunkerService, LangChainRecursiveStrategy
 from app.services.ingestion.data_cleaning import DataCleaningLibrary
 from app.services.ingestion.document_loader import DocumentLoaderLibrary
@@ -33,6 +36,8 @@ from database.sqlite import DB_FILE_PATH
 from database.sqlite import engine as sqlite_engine
 
 from app.agent.multi_agent.master_graph import build_master_agent_graph
+
+logger = logging.getLogger(__name__)
 
 _checkpointer: AsyncSqliteSaver | None = None
 _checkpointer_lock = asyncio.Lock()
@@ -144,7 +149,7 @@ def _build_common_rag_graph(retriever, checkpointer: AsyncSqliteSaver):
 
     llm = ClaudeService()
     input_guardrail = build_input_guardrails(nemo_provider=get_nemo_provider())
-    output_guardrail = build_output_guardrails()
+    output_guardrail = build_wired_output_guardrails()
 
     return build_rag_graph(
         retriever=retriever,
@@ -202,6 +207,26 @@ def get_nemo_provider():
 
 
 @lru_cache(maxsize=1)
+def get_presidio_provider() -> Any:
+    """Load Presidio for output (and later input) PII checks. None if spaCy is missing."""
+    try:
+        from app.guardrails.provider.presidio import PresidioProvider
+
+        return PresidioProvider()
+    except Exception as exc:
+        logger.warning("Presidio provider not available: %s", exc)
+        return None
+
+
+def build_wired_output_guardrails() -> OutputGuardrailService:
+    """Output rails with real providers, not an empty factory call."""
+    return build_output_guardrails(
+        presidio_provider=get_presidio_provider(),
+        grounding_evaluator=TokenOverlapGroundingEvaluator(),
+    )
+
+
+@lru_cache(maxsize=1)
 def get_llm() -> ClaudeService:
     """Return shared ClaudeService instance."""
     return ClaudeService()
@@ -246,7 +271,7 @@ async def get_master_agent_graph():
                 tool_registry=tool_registry,
                 compiled_rag_graph=compiled_rag,
                 input_guardrails=build_input_guardrails(nemo_provider=get_nemo_provider()),
-                output_guardrails=build_output_guardrails(),
+                output_guardrails=build_wired_output_guardrails(),
                 checkpointer=checkpointer,
             )
     return _compiled_graphs["agent"]
