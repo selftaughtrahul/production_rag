@@ -109,6 +109,7 @@ class RAGSubGraphNode:
                     "question": query,
                     "user_id": user_id,
                     "skip_memory_persist": True,
+                    "skip_generate": True,
                     "rewritten_question": None,
                     "documents": [],
                     "context": "",
@@ -123,8 +124,10 @@ class RAGSubGraphNode:
                     }
                 }
                 rag_result = await self.rag_graph.ainvoke(rag_input, config=rag_config)
-                answer = rag_result.get("answer") or rag_result.get("generation", "")
                 context = rag_result.get("context", "")
+                answer = rag_result.get("answer") or rag_result.get("generation", "")
+                if context and not answer:
+                    answer = "Retrieved internal documents."
             except Exception as e:
                 logger.error(f"[RAG Node] RAG StateGraph invocation failed: {e}", exc_info=True)
 

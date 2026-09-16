@@ -3,12 +3,17 @@
 import json
 import logging
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from app.api.dependencies import get_master_agent_graph
+from app.api.dependencies import (
+    build_wired_output_guardrails,
+    get_llm,
+    get_master_agent_graph,
+)
 from app.api.session_access import ensure_session_owner, list_owned_thread_ids
 from app.core.exceptions import LLMUnavailableError
 from app.models.schemas import ChatRequest, UserInDB
@@ -24,7 +29,7 @@ def generate_new_session_id() -> str:
     return f"session_{uuid.uuid4()}"
 
 
-def _build_graph_config(thread_id: str, user_id: str) -> dict:
+def _build_graph_config(thread_id: str, user_id: str) -> dict[str, Any]:
     return {
         "configurable": {"thread_id": thread_id},
         "run_name": f"chat",
@@ -37,11 +42,11 @@ def _build_graph_config(thread_id: str, user_id: str) -> dict:
     }
 
 
-def _sse(payload: dict) -> str:
+def _sse(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
-async def _run_agent(master_graph, question: str, user_id: str, thread_id: str) -> dict:
+async def _run_agent(master_graph: Any, question: str, user_id: str, thread_id: str) -> dict[str, Any]:
     result = await master_graph.ainvoke(
         {
             "query": question,
@@ -65,7 +70,21 @@ async def _run_agent(master_graph, question: str, user_id: str, thread_id: str) 
         "iterations": result.get("iterations", 1),
         "agent_trajectory": trajectory,
         "guardrail_metadata": result.get("guardrail_metadata", {}),
+        "long_term_memories": result.get("long_term_memories") or [],
     }
+
+
+def _context_from_agent(agent_result: dict[str, Any]) -> str:
+    """Build Claude context from specialist observations (RAG chunks, SQL, web)."""
+    parts: list[str] = []
+    for item in agent_result.get("agent_trajectory") or []:
+        meta = item.get("metadata") or {}
+        blob = (meta.get("context") or item.get("result") or "").strip()
+        if not blob:
+            continue
+        name = item.get("agent_name") or "agent"
+        parts.append(f"[{name}]\n{blob}")
+    return "\n\n".join(parts)
 
 
 @router.post("", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
@@ -92,9 +111,35 @@ async def chat(request: ChatRequest,current_user: UserInDB = Depends(get_current
         try:
             master_graph = await get_master_agent_graph()
             agent_result = await _run_agent(master_graph, question, user_id, thread_id)
-            full_answer = agent_result["answer"]
-            if full_answer:
-                yield _sse({"type": "token", "content": full_answer})
+            context = _context_from_agent(agent_result)
+            llm = get_llm()
+            pieces: list[str] = []
+            async for token in llm.generate_stream(
+                question=question,
+                context=context,
+                long_term_memories=agent_result.get("long_term_memories") or [],
+            ):
+                if not token:
+                    continue
+                pieces.append(token)
+                yield _sse({"type": "token", "content": token})
+
+            full_answer = "".join(pieces).strip() or agent_result["answer"]
+            rails = build_wired_output_guardrails()
+            rail_result = await rails.validate(
+                query=question,
+                response=full_answer,
+                context=context,
+            )
+            guardrail_metadata = {
+                **(agent_result.get("guardrail_metadata") or {}),
+                **(rail_result.metadata or {}),
+            }
+            if not rail_result.passed and rail_result.action == "block":
+                yield _sse({"type": "error", "error": "The answer was blocked by a safety check."})
+                return
+            if rail_result.metadata.get("anonymized_response"):
+                full_answer = rail_result.metadata["anonymized_response"]
 
             yield _sse(
                 {
@@ -104,7 +149,7 @@ async def chat(request: ChatRequest,current_user: UserInDB = Depends(get_current
                     "answer": full_answer,
                     "iterations": agent_result["iterations"],
                     "agent_trajectory": agent_result["agent_trajectory"],
-                    "guardrail_metadata": agent_result["guardrail_metadata"],
+                    "guardrail_metadata": guardrail_metadata,
                 }
             )
         except LLMUnavailableError as exc:
