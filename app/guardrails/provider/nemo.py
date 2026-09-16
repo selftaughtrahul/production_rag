@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.guardrails.fast_checks import needs_llm_injection_check
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "nemo_config"
@@ -51,7 +53,7 @@ class NeMoProvider:
 
     async def check_prompt_injection(self, query: str) -> dict[str, Any]:
         if not self.rails:
-            return {"passed": True, "content": query}
+            return _denylist_check(query)
 
         try:
             response = await self.rails.generate_async(
@@ -63,7 +65,26 @@ class NeMoProvider:
             return {"passed": not blocked, "content": content or query}
         except Exception as exc:
             logger.error("NeMo rail check failed: %s", exc)
-            return {"passed": True, "content": query}
+            return {
+                "passed": False,
+                "content": query,
+                "reason": "NeMo unavailable; failing closed.",
+            }
+
+
+def _denylist_check(query: str) -> dict[str, Any]:
+    """Keyword fallback when rails are not loaded. Hits are blocked."""
+    if needs_llm_injection_check(query):
+        return {
+            "passed": False,
+            "content": query,
+            "reason": "Injection pattern matched; NeMo rails are not loaded.",
+        }
+    return {
+        "passed": True,
+        "content": query,
+        "fallback": "denylist",
+    }
 
 
 def _response_text(response: Any) -> str:

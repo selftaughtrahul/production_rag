@@ -21,5 +21,9 @@ class PromptInjectionGuardrail(BaseInputGuardrail):
             return GuardrailResult(passed=True, action="allow")
         res = await self.provider.check_prompt_injection(query)
         if not res["passed"]:
-            return GuardrailResult(passed=False, reason="Prompt injection detected.", action="block")
+            return GuardrailResult(
+                passed=False,
+                reason=str(res.get("reason") or "Prompt injection detected."),
+                action="block",
+            )
         return GuardrailResult(passed=True, action="allow")

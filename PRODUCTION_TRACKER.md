@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 22:50`
+- Last scan: `2026-09-16 22:52`
 - Command: `python track_production.py`
-- Closed items: **15/28 (54%)**
+- Closed items: **16/28 (57%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -12,7 +12,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
 | Priority | Done | Partial | Todo | Total |
 | -------- | ---- | ------- | ---- | ----- |
-| P0 | 15 | 2 | 1 | 18 |
+| P0 | 16 | 1 | 1 | 18 |
 | P1 | 0 | 3 | 2 | 5 |
 | P2 | 0 | 0 | 2 | 2 |
 | P3 | 0 | 1 | 2 | 3 |
@@ -46,7 +46,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | ✅ | `p0-celery-path` | Compose Celery -A app.tasks.celery_app | Background ingest actually starts | Fix docker-compose.yml worker command |
 | ✅ | `p0-llm-retry` | LLM timeout + retry/backoff | Quota/blips should not 500 the chat | Add timeout and tenacity around Claude calls |
 | ✅ | `p0-rerank-err` | Rerank node try/except + fallback | Cross-encoder crash kills the turn | Catch in RAGNodes.rerank; keep fused docs |
-| 🟡 | `p0-nemo` | NeMo injection: do not fail open | Jailbreak allowed when NeMo errors | On NeMo exception, block or use denylist only |
+| ✅ | `p0-nemo` | NeMo injection: do not fail open | Jailbreak allowed when NeMo errors | On NeMo exception, block or use denylist only |
 
 ## P1
 
