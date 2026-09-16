@@ -1,0 +1,6 @@
+{
+  "golden_version": "v1",
+  "min_context_hit": 0.4,
+  "min_answer_overlap": 0.35,
+  "min_cases": 5
+}

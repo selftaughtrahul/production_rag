@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 22:59`
+- Last scan: `2026-09-16 23:03`
 - Command: `python track_production.py`
-- Closed items: **19/28 (68%)**
+- Closed items: **21/28 (75%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -13,9 +13,9 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | Priority | Done | Partial | Todo | Total |
 | -------- | ---- | ------- | ---- | ----- |
 | P0 | 16 | 1 | 1 | 18 |
-| P1 | 3 | 0 | 2 | 5 |
+| P1 | 4 | 0 | 1 | 5 |
 | P2 | 0 | 0 | 2 | 2 |
-| P3 | 0 | 1 | 2 | 3 |
+| P3 | 1 | 1 | 1 | 3 |
 
 ## How we use this
 
@@ -55,7 +55,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | ✅ | `p1-output-rails` | Output guardrails actually constructed | Hallucination/PII at the exit door | Pass providers into build_output_guardrails from dependencies.py |
 | ✅ | `p1-pii` | Presidio PII wired | PII in prompts/responses | Instantiate PresidioProvider in factory/dependencies |
 | ✅ | `p1-sse` | True SSE token streaming | UI waits until full Claude answer | Use ClaudeService.generate_stream in query.py |
-| ⬜ | `p1-eval` | Ragas/eval harness in repo | Know if RAG got better | Add evals/ with a golden set; call ragas from CI |
+| ✅ | `p1-eval` | Ragas/eval harness in repo | Know if RAG got better | Add evals/ with a golden set; call ragas from CI |
 | ⬜ | `p1-tests` | Automated tests | Regressions on routing/SQL/auth | Add tests/ for auth, SQL allowlist, hybrid retrieve |
 
 ## P2
@@ -70,7 +70,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | Status | ID | Item | Why | How to close |
 | ------ | -- | ---- | --- | ------------ |
 | 🟡 | `p3-docker-prod` | Prod Compose (no --reload, non-root) | Safe container run | Drop --reload; USER in Dockerfile |
-| ⬜ | `p3-cicd` | GitHub Actions CI | Lint/test before merge | Add .github/workflows/ci.yml |
+| ✅ | `p3-cicd` | GitHub Actions CI | Lint/test before merge | Add .github/workflows/ci.yml |
 | ⬜ | `p3-postgres` | Postgres instead of SQLite for app state | Multi-instance API | Move users/memories/checkpoints to RDS |
 
 ## Next action

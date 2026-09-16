@@ -1,0 +1,19 @@
+name: eval
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  golden-set:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Offline golden metrics and Ragas (skipped without API key)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RAGAS_DO_NOT_TRACK: "true"
+        run: python evals/run_eval.py --offline --with-ragas
