@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator
 
@@ -7,6 +8,7 @@ from anthropic import (
     Anthropic,
     APIConnectionError,
     APIStatusError,
+    APITimeoutError,
     AsyncAnthropic,
     AuthenticationError,
     PermissionDeniedError,
@@ -14,11 +16,23 @@ from anthropic import (
 )
 from dotenv import load_dotenv
 from langsmith import traceable
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
 
 from app.core.exceptions import LLMUnavailableError
 
+logger = logging.getLogger(__name__)
+
 # Provider wording that means "the account cannot spend right now".
 _QUOTA_MARKERS = ("usage limit", "credit balance", "billing", "quota")
+_LLM_TIMEOUT_SECONDS = 60.0
+_LLM_RETRY_ATTEMPTS = 3
+_RETRYABLE_STATUS = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
 
 
 def _provider_message(exc: APIStatusError) -> str:
@@ -52,6 +66,61 @@ def _as_unavailable(exc: Exception) -> LLMUnavailableError | None:
     return None
 
 
+def _is_retryable(exc: BaseException) -> bool:
+    """Retry transient provider blips; do not retry auth or billing failures."""
+    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+        return False
+    if isinstance(exc, (APIConnectionError, APITimeoutError, RateLimitError)):
+        return True
+    if isinstance(exc, APIStatusError):
+        message = _provider_message(exc).lower()
+        if any(marker in message for marker in _QUOTA_MARKERS):
+            return False
+        return exc.status_code in _RETRYABLE_STATUS
+    return False
+
+
+def _log_usage(response: object) -> None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    logger.info(
+        "Claude usage model=%s input_tokens=%s output_tokens=%s",
+        getattr(response, "model", ""),
+        getattr(usage, "input_tokens", None),
+        getattr(usage, "output_tokens", None),
+    )
+
+
+def _reraise_unavailable(exc: Exception) -> None:
+    unavailable = _as_unavailable(exc)
+    if unavailable is not None:
+        raise unavailable from exc
+    raise exc
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(_LLM_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    retry=retry_if_exception(_is_retryable),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+def _messages_create_with_retry(client: Anthropic, **kwargs):
+    return client.messages.create(timeout=_LLM_TIMEOUT_SECONDS, **kwargs)
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(_LLM_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    retry=retry_if_exception(_is_retryable),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+async def _amessages_create_with_retry(client: AsyncAnthropic, **kwargs):
+    return await client.messages.create(timeout=_LLM_TIMEOUT_SECONDS, **kwargs)
+
+
 class ClaudeService:
     """Service responsible for interacting with Claude."""
 
@@ -69,11 +138,17 @@ class ClaudeService:
             "",
         ).strip()
 
+        timeout = float(os.getenv("ANTHROPIC_TIMEOUT_SECONDS", str(_LLM_TIMEOUT_SECONDS)))
+
         # Synchronous client — used by generate(), generate_text(), rewrite_query()
-        self.client = Anthropic(api_key=self.api_key) if self.api_key else None
+        self.client = (
+            Anthropic(api_key=self.api_key, timeout=timeout) if self.api_key else None
+        )
 
         # Async client — used by generate_stream() for token-by-token streaming
-        self.async_client = AsyncAnthropic(api_key=self.api_key) if self.api_key else None
+        self.async_client = (
+            AsyncAnthropic(api_key=self.api_key, timeout=timeout) if self.api_key else None
+        )
 
     def _check_client(self) -> None:
         """Raise a clear error when ANTHROPIC_API_KEY is missing."""
@@ -112,18 +187,17 @@ class ClaudeService:
         })
 
         try:
-            response = self.client.messages.create(
+            response = _messages_create_with_retry(
+                self.client,
                 model=self.model,
                 max_tokens=max_tokens,
                 system=system_prompt or "You are a helpful assistant.",
                 messages=messages,
             )
         except Exception as e:
-            unavailable = _as_unavailable(e)
-            if unavailable is not None:
-                raise unavailable from e
-            raise
+            _reraise_unavailable(e)
 
+        _log_usage(response)
         return response.content[0].text.strip()
 
     @traceable(run_type="llm", name="Claude RAG Generate")
@@ -174,18 +248,17 @@ Question:
         })
 
         try:
-            response = self.client.messages.create(
+            response = _messages_create_with_retry(
+                self.client,
                 model=self.model,
                 max_tokens=1024,
                 system=system_prompt,
                 messages=messages,
             )
         except Exception as e:
-            unavailable = _as_unavailable(e)
-            if unavailable is not None:
-                raise unavailable from e
-            raise
+            _reraise_unavailable(e)
 
+        _log_usage(response)
         return response.content[0].text.strip()
 
     # ──────────────────────────────────────────────────────────────────
@@ -257,14 +330,12 @@ Question:
                 max_tokens=1024,
                 system=system_prompt,
                 messages=messages,
+                timeout=_LLM_TIMEOUT_SECONDS,
             ) as stream:
                 async for text_token in stream.text_stream:
                     yield text_token
         except Exception as exc:
-            unavailable = _as_unavailable(exc)
-            if unavailable is not None:
-                raise unavailable from exc
-            raise
+            _reraise_unavailable(exc)
 
     @traceable(run_type="llm", name="Claude Rewrite Query")
     def rewrite_query(
