@@ -240,6 +240,79 @@ def check_answer_cache() -> Status:
     return _status(semantic or redis_cache)
 
 
+def check_audit_logs() -> Status:
+    query = _read("app/api/query.py")
+    execute = _read("app/tools/execute.py")
+    return _status(
+        "audit_event" in query and "audit_event" in execute,
+        partial="audit_event" in _read("app/core/audit.py"),
+    )
+
+
+def check_prometheus() -> Status:
+    main = _read("main.py")
+    return _status("/metrics" in main and "render_prometheus" in main)
+
+
+def check_mcp() -> Status:
+    server = _read("app/mcp/server.py")
+    return _status("ask_rag" in server and "tools/list" in server)
+
+
+def check_jailbreak() -> Status:
+    factory = _read("app/guardrails/factory.py")
+    rail = _read("app/guardrails/input/jailbreak.py")
+    return _status("JailbreakGuardrail" in factory and "class JailbreakGuardrail" in rail)
+
+
+def check_human_approval() -> Status:
+    base = _read("app/tools/base.py")
+    execute = _read("app/tools/execute.py")
+    return _status("requires_approval" in base and "requires_approval" in execute)
+
+
+def check_langsmith_wired() -> Status:
+    return _status("LANGCHAIN_TRACING_V2" in _read("main.py"), partial="LANGSMITH" in _read("app/core/config.py"))
+
+
+def check_structured_outputs() -> Status:
+    return _status("agenerate_structured" in _read("app/services/llm/claude.py"))
+
+
+def check_memory_types() -> Status:
+    models = _read("app/memory/models.py")
+    persist = _read("app/memory/persist.py")
+    query = _read("app/api/query.py")
+    has_ltm = "persist_from_turn" in persist
+    has_session = "session_" in query and "thread_id" in query
+    has_types = "episodic" in models and "semantic" in models
+    return _status(has_ltm and has_session and has_types, partial=has_ltm)
+
+
+def check_deepeval() -> Status:
+    return _status(_any_source_contains("deepeval"), partial=False)
+
+
+def check_langfuse() -> Status:
+    return _status(_any_source_contains("langfuse"), partial=False)
+
+
+def check_mlflow() -> Status:
+    return _status(_any_source_contains("mlflow"), partial=False)
+
+
+def check_grafana() -> Status:
+    compose = _read("docker-compose.yml")
+    return _status("grafana" in compose.lower())
+
+
+def check_knowledge_graph() -> Status:
+    return _status(
+        _any_source_contains("KnowledgeGraph") or _any_source_contains("neo4j"),
+        partial=False,
+    )
+
+
 CHECKS: list[Check] = [
     Check("p0-jwt", "P0", "JWT register/login/me", "Identity for tenant isolation", check_jwt_auth, "Already in app/api/auth.py"),
     Check("p0-session", "P0", "Session ownership checks", "Stop users reading another thread", check_session_owner, "Already in app/api/session_access.py"),
@@ -269,6 +342,19 @@ CHECKS: list[Check] = [
     Check("p3-docker-prod", "P3", "Prod Compose (no --reload, non-root)", "Safe container run", check_health_prod_docker, "Drop --reload; USER in Dockerfile"),
     Check("p3-cicd", "P3", "GitHub Actions CI", "Lint/test before merge", check_cicd, "Add .github/workflows/ci.yml"),
     Check("p3-postgres", "P3", "Postgres instead of SQLite for app state", "Multi-instance API", check_postgres, "Move users/memories/checkpoints to RDS"),
+    Check("p4-audit", "P4", "Audit logs for chat and tools", "Replay and abuse review", check_audit_logs, "audit_event on chat/tool calls; no raw PII in logs"),
+    Check("p4-prometheus", "P4", "Prometheus /metrics", "RED metrics for the API", check_prometheus, "GET /metrics Prometheus text"),
+    Check("p4-mcp", "P4", "MCP server for RAG", "Cursor and other MCP clients", check_mcp, "app/mcp/server.py tools/list + ask_rag"),
+    Check("p4-jailbreak", "P4", "Jailbreak detection", "Bypass of system policy", check_jailbreak, "JailbreakGuardrail on input (denylist + NeMo)"),
+    Check("p4-human-approval", "P4", "Human approval gate on write tools", "Irreversible agent actions", check_human_approval, "requires_approval on BaseAgentTool; invoke_tool refuses until approved"),
+    Check("p4-langsmith", "P4", "LangSmith tracing wired at startup", "Distributed LLM traces", check_langsmith_wired, "Set LANGCHAIN_TRACING_V2 from Settings in main.py"),
+    Check("p4-structured", "P4", "Structured LLM outputs", "Supervisor JSON schema", check_structured_outputs, "ClaudeService.agenerate_structured + Pydantic"),
+    Check("p4-memory", "P4", "Short/long/conversation/episodic memory", "Agent memory types", check_memory_types, "Checkpoints + user_memories + episodic/semantic types"),
+    Check("p4-deepeval", "P4", "DeepEval harness", "Alternate LLM-as-judge", check_deepeval, "Add evals using deepeval (Ragas already covers judge)"),
+    Check("p4-langfuse", "P4", "Langfuse tracing", "Open-source LLM observability", check_langfuse, "Optional Langfuse client; LangSmith is the current tracer"),
+    Check("p4-mlflow", "P4", "MLflow experiment tracking", "Prompt/model experiment store", check_mlflow, "Add MLflow only if you need experiment registry beyond LangSmith"),
+    Check("p4-grafana", "P4", "Grafana dashboards", "Human metrics UI", check_grafana, "Point Grafana at /metrics; not shipped in Compose yet"),
+    Check("p4-knowledge-graph", "P4", "Knowledge graphs", "Entity/relation RAG", check_knowledge_graph, "Not in this stack; hybrid Chroma+BM25 is the knowledge store"),
 ]
 
 
@@ -312,7 +398,7 @@ def render_markdown(rows: list[tuple[Check, Status]]) -> str:
         "| Priority | Done | Partial | Todo | Total |",
         "| -------- | ---- | ------- | ---- | ----- |",
     ]
-    for pri in ("P0", "P1", "P2", "P3"):
+    for pri in ("P0", "P1", "P2", "P3", "P4"):
         b = by_pri.get(pri, {"done": 0, "partial": 0, "todo": 0, "total": 0})
         lines.append(f"| {pri} | {b['done']} | {b['partial']} | {b['todo']} | {b['total']} |")
 

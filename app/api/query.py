@@ -17,7 +17,9 @@ from app.api.dependencies import (
     get_master_agent_graph,
 )
 from app.api.session_access import ensure_session_owner, list_owned_thread_ids
+from app.core.audit import audit_event
 from app.core.exceptions import LLMUnavailableError
+from app.core.metrics import inc_chat
 from app.core.rate_limit import CHAT_LIMIT, limiter
 from app.models.schemas import ChatRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
@@ -122,6 +124,13 @@ async def chat(
             cached_answer = get_cached_answer(user_id, question)
             if cached_answer:
                 logger.info("response_cache hit user_id=%s", user_id)
+                inc_chat("cache")
+                audit_event(
+                    "chat.done",
+                    user_id=user_id,
+                    session_id=thread_id,
+                    data={"outcome": "cache"},
+                )
                 yield _sse({"type": "token", "content": cached_answer})
                 yield _sse(
                     {
@@ -163,12 +172,32 @@ async def chat(
                 **(rail_result.metadata or {}),
             }
             if not rail_result.passed and rail_result.action == "block":
+                inc_chat("blocked")
+                audit_event(
+                    "chat.blocked",
+                    user_id=user_id,
+                    session_id=thread_id,
+                    data={"stage": "output_guardrail"},
+                )
                 yield _sse({"type": "error", "error": "The answer was blocked by a safety check."})
                 return
             if rail_result.metadata.get("anonymized_response"):
                 full_answer = rail_result.metadata["anonymized_response"]
 
             set_cached_answer(user_id, question, full_answer)
+            inc_chat("ok")
+            audit_event(
+                "chat.done",
+                user_id=user_id,
+                session_id=thread_id,
+                data={
+                    "outcome": "ok",
+                    "agents": [
+                        item.get("agent_name")
+                        for item in (agent_result.get("agent_trajectory") or [])
+                    ],
+                },
+            )
 
             yield _sse(
                 {
@@ -184,9 +213,23 @@ async def chat(
         except LLMUnavailableError as exc:
 
             logger.warning("Chat unavailable: %s", exc)
+            inc_chat("error")
+            audit_event(
+                "chat.error",
+                user_id=user_id,
+                session_id=thread_id,
+                data={"outcome": "llm_unavailable"},
+            )
             yield _sse({"type": "error", "error": str(exc)})
         except Exception as exc:
             logger.error("Chat failed: %s", exc, exc_info=True)
+            inc_chat("error")
+            audit_event(
+                "chat.error",
+                user_id=user_id,
+                session_id=thread_id,
+                data={"outcome": "failed"},
+            )
             yield _sse({"type": "error", "error": "Query could not be completed."})
 
     return StreamingResponse(

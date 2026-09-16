@@ -8,6 +8,7 @@ from app.guardrails.output_service import OutputGuardrailService
 from app.memory.persist import persist_from_turn_background
 from app.memory.service import MemoryService
 from app.services.llm.claude import ClaudeService
+from app.tools.execute import invoke_tool
 from app.tools.registry import ToolRegistry
 from database.sqlite import SessionLocal
 
@@ -134,8 +135,11 @@ class RAGSubGraphNode:
         if not answer and self.tool_registry and user_id:
             doc_tool = self.tool_registry.get_tool("document_search")
             if doc_tool:
-                doc_output = await doc_tool.ainvoke(
-                    {"query": query, "top_k": 4, "user_id": user_id}
+                doc_output = await invoke_tool(
+                    doc_tool,
+                    {"query": query, "top_k": 4, "user_id": user_id},
+                    user_id=user_id,
+                    session_id=thread_id,
                 )
                 answer = f"Retrieved documents:\n{doc_output}"
 
@@ -163,6 +167,9 @@ class SQLSubGraphNode:
     async def __call__(self, state: SupervisorState) -> Dict[str, Any]:
         logger.info("[SQL Node] Executing database query specialist...")
         query = state.get("query", "")
+        user_id = state.get("user_id")
+        session_id = state.get("thread_id")
+        approved = bool(state.get("tool_approved"))
 
         schema_tool = self.registry.get_tool("sql_db_schema")
         query_tool = self.registry.get_tool("sql_db_query")
@@ -175,11 +182,17 @@ class SQLSubGraphNode:
 
         try:
             # 1. Fetch schema
-            schema_info = await schema_tool.ainvoke({})
+            schema_info = await invoke_tool(
+                schema_tool,
+                {},
+                user_id=user_id,
+                session_id=session_id,
+                approved=approved,
+            )
 
             # 2. Generate read-only SQL query
             sql_prompt = f"""\
-You are an expert SQL analyst. Given the following database schema and user question, write a single valid SQLite SELECT query.
+You are an expert SQL analyst. Given the following database schema and user question, write a single valid read-only SELECT query.
 Output ONLY the raw SQL query with no markdown blocks or surrounding text.
 
 Schema:
@@ -191,7 +204,13 @@ User Question: {query}"""
             cleaned_sql = generated_sql.replace("```sql", "").replace("```", "").strip()
 
             # 3. Execute SQL query
-            query_result = await query_tool.ainvoke({"query": cleaned_sql})
+            query_result = await invoke_tool(
+                query_tool,
+                {"query": cleaned_sql},
+                user_id=user_id,
+                session_id=session_id,
+                approved=approved,
+            )
 
             # 4. Summarize result
             summary_prompt = f"""\
@@ -230,6 +249,8 @@ class WebAgentNode:
     async def __call__(self, state: SupervisorState) -> Dict[str, Any]:
         logger.info("[Web Agent Node] Executing live web search...")
         query = state.get("query", "")
+        user_id = state.get("user_id")
+        session_id = state.get("thread_id")
         search_tool = self.registry.get_tool("web_search")
 
         if not search_tool:
@@ -240,7 +261,13 @@ class WebAgentNode:
             }
 
         try:
-            search_raw = await search_tool.ainvoke({"query": query, "max_results": 5})
+            search_raw = await invoke_tool(
+                search_tool,
+                {"query": query, "max_results": 5},
+                user_id=user_id,
+                session_id=session_id,
+                approved=bool(state.get("tool_approved")),
+            )
             synth_prompt = f"""\
 You already have live web search results. Use only those results.
 Never say you cannot browse the internet or that your knowledge is outdated.
@@ -353,7 +380,7 @@ class OutputGuardrailNode:
 # 8. Save Memory Node (Supervisor-Level Long-Term Memory Extraction)
 # ─────────────────────────────────────────────────────────────────────────────
 class SaveMemoryNode:
-    """Extracts durable user facts from the complete turn and persists them to SQLite."""
+    """Extracts durable user facts from the complete turn and persists them."""
 
     def __init__(self, llm: ClaudeService):
         self.llm = llm

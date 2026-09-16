@@ -38,7 +38,7 @@ Return a JSON object with these keys:
 - action: ADD, UPDATE, or IGNORE
 - memory: concise fact about the user, or null
 - memory_id: existing memory id when action is UPDATE, otherwise null
-- memory_type: personal, professional, technical, preference, project, goal, or general
+- memory_type: personal, professional, technical, preference, project, goal, general, semantic, or episodic (episodic = a past conversation event; semantic = a stable user fact)
 - importance: number between 0 and 1
 - reason: short explanation
 

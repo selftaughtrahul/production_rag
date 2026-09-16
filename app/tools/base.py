@@ -25,6 +25,7 @@ class BaseAgentTool(BaseTool):
 
     args_schema: Optional[Type[BaseModel]] = None
     return_direct: bool = False
+    requires_approval: bool = False
 
     def _format_error(self, message: str) -> ToolResult:
         return ToolResult(success=False, data=None, error=message)

@@ -3,6 +3,7 @@ from app.guardrails.output_service import OutputGuardrailService
 from app.guardrails.input.validation import InputValidationGuardrail
 from app.guardrails.input.injection import PromptInjectionGuardrail
 from app.guardrails.input.pii import PresidioPIIGuardrail as InputPresidioGuardrail
+from app.guardrails.input.jailbreak import JailbreakGuardrail
 from app.guardrails.input.safety import InputSafetyGuardrail
 from app.guardrails.output.schema import OutputSchemaGuardrail
 from app.guardrails.output.grounding import GroundingGuardrail
@@ -19,7 +20,10 @@ def build_input_guardrails(nemo_provider=None, presidio_provider=None, llama_gua
         else None
     )
     pii_detector = InputPresidioGuardrail(provider=presidio_provider) if presidio_provider else None
-    safety_checker = InputSafetyGuardrail(provider=llama_guard_provider) if llama_guard_provider else None
+    if llama_guard_provider:
+        safety_checker = InputSafetyGuardrail(provider=llama_guard_provider)
+    else:
+        safety_checker = JailbreakGuardrail(provider=nemo_provider)
 
     return InputGuardrailService(
         input_validator=input_validator,

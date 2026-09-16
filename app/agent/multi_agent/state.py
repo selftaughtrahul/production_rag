@@ -33,8 +33,9 @@ class SupervisorState(TypedDict, total=False):
     # Conversational memory (LangGraph add_messages reducer)
     messages: Annotated[List[BaseMessage], add_messages]
 
-    # Persistent long-term user facts loaded from SQLite
+    # Persistent long-term user facts (Postgres user_memories)
     long_term_memories: List[str]
+    tool_approved: bool
 
     # Next node to dispatch: 'rag_agent', 'sql_agent', 'web_agent', 'general_agent', 'FINISH'
     next_node: str

@@ -33,6 +33,9 @@ class JSONFormatter(logging.Formatter):
         if hasattr(record, "session_id"):
             log_data["session_id"] = record.session_id
 
+        if hasattr(record, "user_id"):
+            log_data["user_id"] = record.user_id
+
         if hasattr(record, "node"):
             log_data["node"] = record.node
 
@@ -127,6 +130,7 @@ def log_event(
     level: str = "info",
     run_id: str | None = None,
     session_id: str | None = None,
+    user_id: str | None = None,
     node: str | None = None,
     latency_ms: float | None = None,
     data: dict[str, Any] | None = None,
@@ -137,6 +141,7 @@ def log_event(
         "event": event,
         "run_id": run_id,
         "session_id": session_id,
+        "user_id": user_id,
         "node": node,
         "latency_ms": latency_ms,
         "data": data or {},

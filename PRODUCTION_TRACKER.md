@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 23:26`
+- Last scan: `2026-09-16 23:56`
 - Command: `python track_production.py`
-- Closed items: **25/28 (89%)**
+- Closed items: **36/41 (88%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -12,10 +12,11 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
 | Priority | Done | Partial | Todo | Total |
 | -------- | ---- | ------- | ---- | ----- |
-| P0 | 16 | 1 | 1 | 18 |
+| P0 | 18 | 0 | 0 | 18 |
 | P1 | 5 | 0 | 0 | 5 |
 | P2 | 2 | 0 | 0 | 2 |
-| P3 | 2 | 1 | 0 | 3 |
+| P3 | 3 | 0 | 0 | 3 |
+| P4 | 8 | 0 | 5 | 13 |
 
 ## How we use this
 
@@ -41,8 +42,8 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | ✅ | `p0-thread-id` | Nested RAG ainvoke passes thread_id | Checkpoint correctness | Pass config={'configurable': {'thread_id': ...}} in RAGSubGraphNode |
 | ✅ | `p0-doc-text` | document_search uses .text | Fallback RAG tool crash | Replace page_content with doc.text |
 | ✅ | `p0-bm25-delete` | Delete BM25 chunks with the document | Stale lexical hits after delete | Call BM25Store.delete_document in documents.py |
-| ⬜ | `p0-health` | GET /health | Load balancer / Compose probes | Add a FastAPI health route in main.py |
-| 🟡 | `p0-logger` | Wire JSON logger at startup | Request traces in production | Call setup_logger() from main.py |
+| ✅ | `p0-health` | GET /health | Load balancer / Compose probes | Add a FastAPI health route in main.py |
+| ✅ | `p0-logger` | Wire JSON logger at startup | Request traces in production | Call setup_logger() from main.py |
 | ✅ | `p0-celery-path` | Compose Celery -A app.tasks.celery_app | Background ingest actually starts | Fix docker-compose.yml worker command |
 | ✅ | `p0-llm-retry` | LLM timeout + retry/backoff | Quota/blips should not 500 the chat | Add timeout and tenacity around Claude calls |
 | ✅ | `p0-rerank-err` | Rerank node try/except + fallback | Cross-encoder crash kills the turn | Catch in RAGNodes.rerank; keep fused docs |
@@ -69,15 +70,33 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
 | Status | ID | Item | Why | How to close |
 | ------ | -- | ---- | --- | ------------ |
-| 🟡 | `p3-docker-prod` | Prod Compose (no --reload, non-root) | Safe container run | Drop --reload; USER in Dockerfile |
+| ✅ | `p3-docker-prod` | Prod Compose (no --reload, non-root) | Safe container run | Drop --reload; USER in Dockerfile |
 | ✅ | `p3-cicd` | GitHub Actions CI | Lint/test before merge | Add .github/workflows/ci.yml |
 | ✅ | `p3-postgres` | Postgres instead of SQLite for app state | Multi-instance API | Move users/memories/checkpoints to RDS |
 
+## P4
+
+| Status | ID | Item | Why | How to close |
+| ------ | -- | ---- | --- | ------------ |
+| ✅ | `p4-audit` | Audit logs for chat and tools | Replay and abuse review | audit_event on chat/tool calls; no raw PII in logs |
+| ✅ | `p4-prometheus` | Prometheus /metrics | RED metrics for the API | GET /metrics Prometheus text |
+| ✅ | `p4-mcp` | MCP server for RAG | Cursor and other MCP clients | app/mcp/server.py tools/list + ask_rag |
+| ✅ | `p4-jailbreak` | Jailbreak detection | Bypass of system policy | JailbreakGuardrail on input (denylist + NeMo) |
+| ✅ | `p4-human-approval` | Human approval gate on write tools | Irreversible agent actions | requires_approval on BaseAgentTool; invoke_tool refuses until approved |
+| ✅ | `p4-langsmith` | LangSmith tracing wired at startup | Distributed LLM traces | Set LANGCHAIN_TRACING_V2 from Settings in main.py |
+| ✅ | `p4-structured` | Structured LLM outputs | Supervisor JSON schema | ClaudeService.agenerate_structured + Pydantic |
+| ✅ | `p4-memory` | Short/long/conversation/episodic memory | Agent memory types | Checkpoints + user_memories + episodic/semantic types |
+| ⬜ | `p4-deepeval` | DeepEval harness | Alternate LLM-as-judge | Add evals using deepeval (Ragas already covers judge) |
+| ⬜ | `p4-langfuse` | Langfuse tracing | Open-source LLM observability | Optional Langfuse client; LangSmith is the current tracer |
+| ⬜ | `p4-mlflow` | MLflow experiment tracking | Prompt/model experiment store | Add MLflow only if you need experiment registry beyond LangSmith |
+| ⬜ | `p4-grafana` | Grafana dashboards | Human metrics UI | Point Grafana at /metrics; not shipped in Compose yet |
+| ⬜ | `p4-knowledge-graph` | Knowledge graphs | Entity/relation RAG | Not in this stack; hybrid Chroma+BM25 is the knowledge store |
+
 ## Next action
 
-Work next: **p0-health — GET /health**
+Work next: **p4-deepeval — DeepEval harness**
 
-Add a FastAPI health route in main.py
+Add evals using deepeval (Ragas already covers judge)
 
 ---
 

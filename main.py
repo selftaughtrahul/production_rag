@@ -8,15 +8,18 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.query import router as chat_router
 from app.core.config import Settings
+from app.core.logger import setup_logger
+from app.core.metrics import render_prometheus
 from app.core.rate_limit import attach_rate_limiter
 from database.sqlite import init_db
 
+setup_logger()
 logger = logging.getLogger(__name__)
 
 
@@ -44,11 +47,24 @@ async def _warm_retrieval_models() -> None:
         logger.exception("Background model warmup failed")
 
 
+def _configure_langsmith() -> None:
+    settings = Settings.from_environment()
+    if not settings.LANGSMITH_TRACING or not settings.LANGSMITH_API_KEY:
+        return
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
+    os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
+    os.environ["LANGCHAIN_ENDPOINT"] = settings.LANGSMITH_ENDPOINT
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGSMITH_API_KEY"] = settings.LANGSMITH_API_KEY
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ''' Initialise the SQLite schema and warm retrieval models '''
+    ''' Initialise the Postgres schema and warm retrieval models '''
     init_db()
     _configure_hf_token()
+    _configure_langsmith()
     warmup = asyncio.create_task(_warm_retrieval_models())
     yield
     warmup.cancel()
@@ -66,4 +82,16 @@ app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
 attach_rate_limiter(app)
+
+
+@app.get("/health", tags=["ops"])
+def health() -> dict[str, str]:
+    """Load balancer / Compose liveness probe."""
+    return {"status": "ok"}
+
+
+@app.get("/metrics", tags=["ops"])
+def metrics() -> Response:
+    """Prometheus scrape endpoint."""
+    return Response(content=render_prometheus(), media_type="text/plain; version=0.0.4")
 

@@ -283,7 +283,10 @@ async def get_master_agent_graph():
                 llm=llm,
                 tool_registry=tool_registry,
                 compiled_rag_graph=compiled_rag,
-                input_guardrails=build_input_guardrails(nemo_provider=get_nemo_provider()),
+                input_guardrails=build_input_guardrails(
+                    nemo_provider=get_nemo_provider(),
+                    presidio_provider=get_presidio_provider(),
+                ),
                 output_guardrails=build_wired_output_guardrails(),
                 checkpointer=checkpointer,
             )
