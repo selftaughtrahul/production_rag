@@ -14,6 +14,7 @@ from typing import Any
 
 from langsmith import traceable
 
+from app.services.retriever.knowledge_graph import KnowledgeGraph
 from app.services.retriever.base import Retriever
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ class HybridRetriever(Retriever):
             sparse_results=sparse_results,
             top_k=top_k,
         )
+        fused = KnowledgeGraph().rerank(query, fused, top_k=top_k)
 
         logger.info("After RRF fusion: %d docs returned", len(fused))
         return fused

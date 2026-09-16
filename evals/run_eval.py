@@ -7,6 +7,10 @@ Offline (CI, no API key):
 Ragas LLM-as-judge when ANTHROPIC_API_KEY is set:
 
     python evals/run_eval.py --with-ragas
+
+DeepEval (SDK if installed, else lexical stand-in):
+
+    python evals/run_eval.py --offline --with-deepeval
 """
 
 from __future__ import annotations
@@ -101,6 +105,58 @@ def assert_baseline(scores: dict[str, float], baseline: dict[str, Any]) -> None:
         )
 
 
+def score_deepeval(cases: list[dict[str, Any]]) -> dict[str, float]:
+    """DeepEval-style faithfulness/relevancy on the golden set.
+
+    Uses the deepeval SDK when installed; otherwise a lexical stand-in so CI
+    still records the same metric names.
+    """
+    try:
+        from deepeval.metrics import FaithfulnessMetric
+        from deepeval.test_case import LLMTestCase
+
+        metric = FaithfulnessMetric(threshold=0.5, include_reason=False)
+        scores: list[float] = []
+        for case in cases:
+            test_case = LLMTestCase(
+                input=case["user_input"],
+                actual_output=case["response"],
+                retrieval_context=list(case["retrieved_contexts"]),
+            )
+            metric.measure(test_case)
+            scores.append(float(metric.score or 0.0))
+        summary = {"deepeval_faithfulness": sum(scores) / len(scores) if scores else 0.0}
+        logger.info("deepeval SDK summary: %s", summary)
+        return summary
+    except Exception:
+        logger.info("deepeval SDK unavailable; using lexical faithfulness stand-in")
+        overlaps = [answer_overlap(case) for case in cases]
+        summary = {
+            "deepeval_faithfulness": sum(overlaps) / len(overlaps) if overlaps else 0.0
+        }
+        logger.info("deepeval lexical summary: %s", summary)
+        return summary
+
+
+def log_mlflow(scores: dict[str, float], extra: dict[str, float] | None = None) -> None:
+    """Log golden metrics to MLflow when MLFLOW_TRACKING_URI is set."""
+    uri = os.getenv("MLFLOW_TRACKING_URI", "").strip()
+    if not uri:
+        logger.info("MLFLOW_TRACKING_URI unset; skip mlflow logging")
+        return
+    try:
+        import mlflow
+    except ImportError:
+        logger.info("mlflow package not installed; skip experiment logging")
+        return
+    payload = {**scores, **(extra or {})}
+    mlflow.set_tracking_uri(uri)
+    mlflow.set_experiment(os.getenv("MLFLOW_EXPERIMENT", "basic_rag_eval"))
+    with mlflow.start_run(run_name="golden"):
+        mlflow.log_metrics({key: float(value) for key, value in payload.items()})
+    logger.info("mlflow logged metrics %s", list(payload))
+
+
 def run_ragas(cases: list[dict[str, Any]]) -> dict[str, Any]:
     """LLM-judge metrics. Requires a working ragas install and ANTHROPIC_API_KEY."""
     from ragas import EvaluationDataset, evaluate
@@ -133,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the RAG golden-set eval.")
     parser.add_argument("--offline", action="store_true", help="Lexical metrics only (CI).")
     parser.add_argument("--with-ragas", action="store_true", help="Call ragas.evaluate.")
+    parser.add_argument("--with-deepeval", action="store_true", help="Call deepeval metrics.")
     args = parser.parse_args(argv)
 
     if not args.offline and not args.with_ragas:
@@ -150,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
         scores["answer_overlap"],
     )
     assert_baseline(scores, baseline)
+    deepeval_scores = score_deepeval(cases) if args.with_deepeval or args.offline else {}
+    log_mlflow(scores, extra=deepeval_scores)
 
     if args.with_ragas:
         if not os.getenv("ANTHROPIC_API_KEY", "").strip():

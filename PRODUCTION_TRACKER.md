@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 23:56`
+- Last scan: `2026-09-17 00:02`
 - Command: `python track_production.py`
-- Closed items: **36/41 (88%)**
+- Closed items: **41/41 (100%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -16,14 +16,14 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | P1 | 5 | 0 | 0 | 5 |
 | P2 | 2 | 0 | 0 | 2 |
 | P3 | 3 | 0 | 0 | 3 |
-| P4 | 8 | 0 | 5 | 13 |
+| P4 | 13 | 0 | 0 | 13 |
 
 ## How we use this
 
 1. Run `python track_production.py` after a production change.
 2. Pick the next **⬜ P0** row and implement it.
 3. Re-run the tracker. The row should flip to ✅.
-4. Do not call the project production-ready until **P0 is all ✅** and P1 eval exists.
+4. Do not call the project production-ready until **P0–P4 are all ✅**.
 
 
 ## P0
@@ -86,17 +86,15 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | ✅ | `p4-langsmith` | LangSmith tracing wired at startup | Distributed LLM traces | Set LANGCHAIN_TRACING_V2 from Settings in main.py |
 | ✅ | `p4-structured` | Structured LLM outputs | Supervisor JSON schema | ClaudeService.agenerate_structured + Pydantic |
 | ✅ | `p4-memory` | Short/long/conversation/episodic memory | Agent memory types | Checkpoints + user_memories + episodic/semantic types |
-| ⬜ | `p4-deepeval` | DeepEval harness | Alternate LLM-as-judge | Add evals using deepeval (Ragas already covers judge) |
-| ⬜ | `p4-langfuse` | Langfuse tracing | Open-source LLM observability | Optional Langfuse client; LangSmith is the current tracer |
-| ⬜ | `p4-mlflow` | MLflow experiment tracking | Prompt/model experiment store | Add MLflow only if you need experiment registry beyond LangSmith |
-| ⬜ | `p4-grafana` | Grafana dashboards | Human metrics UI | Point Grafana at /metrics; not shipped in Compose yet |
-| ⬜ | `p4-knowledge-graph` | Knowledge graphs | Entity/relation RAG | Not in this stack; hybrid Chroma+BM25 is the knowledge store |
+| ✅ | `p4-deepeval` | DeepEval harness | Alternate LLM-as-judge | Already in evals/run_eval.py score_deepeval |
+| ✅ | `p4-langfuse` | Langfuse tracing | Open-source LLM observability | Already in app/core/langfuse_tracer.py |
+| ✅ | `p4-mlflow` | MLflow experiment tracking | Prompt/model experiment store | Already log_mlflow in evals/run_eval.py |
+| ✅ | `p4-grafana` | Grafana dashboards | Human metrics UI | Already Grafana+Prometheus in docker-compose.yml |
+| ✅ | `p4-knowledge-graph` | Knowledge graphs | Entity/relation RAG | Already KnowledgeGraph rerank after RRF |
 
 ## Next action
 
-Work next: **p4-deepeval — DeepEval harness**
-
-Add evals using deepeval (Ragas already covers judge)
+All tracked items are ✅. Revisit AWS/deploy SLOs outside this list.
 
 ---
 

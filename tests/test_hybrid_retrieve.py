@@ -53,3 +53,13 @@ def test_rrf_prefers_docs_in_both_lists() -> None:
     fused = hybrid.retrieve("query", top_k=3)
     assert [doc.chunk_id for doc in fused][0] == "both"
     assert fused[0].metadata.get("rrf_score", 0) > 0
+
+
+def test_knowledge_graph_boosts_overlapping_chunk() -> None:
+    from app.services.retriever.knowledge_graph import KnowledgeGraph
+
+    weak = _doc("weak", "unrelated filler text about weather")
+    strong = _doc("strong", "hybrid retrieval dense bm25 fusion")
+    ranked = KnowledgeGraph().rerank("hybrid retrieval bm25", [weak, strong], top_k=2)
+    assert ranked[0].chunk_id == "strong"
+    assert "kg_score" in ranked[0].metadata

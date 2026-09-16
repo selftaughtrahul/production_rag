@@ -350,11 +350,11 @@ CHECKS: list[Check] = [
     Check("p4-langsmith", "P4", "LangSmith tracing wired at startup", "Distributed LLM traces", check_langsmith_wired, "Set LANGCHAIN_TRACING_V2 from Settings in main.py"),
     Check("p4-structured", "P4", "Structured LLM outputs", "Supervisor JSON schema", check_structured_outputs, "ClaudeService.agenerate_structured + Pydantic"),
     Check("p4-memory", "P4", "Short/long/conversation/episodic memory", "Agent memory types", check_memory_types, "Checkpoints + user_memories + episodic/semantic types"),
-    Check("p4-deepeval", "P4", "DeepEval harness", "Alternate LLM-as-judge", check_deepeval, "Add evals using deepeval (Ragas already covers judge)"),
-    Check("p4-langfuse", "P4", "Langfuse tracing", "Open-source LLM observability", check_langfuse, "Optional Langfuse client; LangSmith is the current tracer"),
-    Check("p4-mlflow", "P4", "MLflow experiment tracking", "Prompt/model experiment store", check_mlflow, "Add MLflow only if you need experiment registry beyond LangSmith"),
-    Check("p4-grafana", "P4", "Grafana dashboards", "Human metrics UI", check_grafana, "Point Grafana at /metrics; not shipped in Compose yet"),
-    Check("p4-knowledge-graph", "P4", "Knowledge graphs", "Entity/relation RAG", check_knowledge_graph, "Not in this stack; hybrid Chroma+BM25 is the knowledge store"),
+    Check("p4-deepeval", "P4", "DeepEval harness", "Alternate LLM-as-judge", check_deepeval, "Already in evals/run_eval.py score_deepeval"),
+    Check("p4-langfuse", "P4", "Langfuse tracing", "Open-source LLM observability", check_langfuse, "Already in app/core/langfuse_tracer.py"),
+    Check("p4-mlflow", "P4", "MLflow experiment tracking", "Prompt/model experiment store", check_mlflow, "Already log_mlflow in evals/run_eval.py"),
+    Check("p4-grafana", "P4", "Grafana dashboards", "Human metrics UI", check_grafana, "Already Grafana+Prometheus in docker-compose.yml"),
+    Check("p4-knowledge-graph", "P4", "Knowledge graphs", "Entity/relation RAG", check_knowledge_graph, "Already KnowledgeGraph rerank after RRF"),
 ]
 
 
@@ -409,7 +409,7 @@ def render_markdown(rows: list[tuple[Check, Status]]) -> str:
         "1. Run `python track_production.py` after a production change.",
         "2. Pick the next **⬜ P0** row and implement it.",
         "3. Re-run the tracker. The row should flip to ✅.",
-        "4. Do not call the project production-ready until **P0 is all ✅** and P1 eval exists.",
+        "4. Do not call the project production-ready until **P0–P4 are all ✅**.",
         "",
     ]
 

@@ -112,6 +112,41 @@ services:
     depends_on:
       - api
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: basic_rag_prometheus
+    restart: unless-stopped
+    networks:
+      - basic_rag
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: basic_rag_grafana
+    restart: unless-stopped
+    networks:
+      - basic_rag
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
 networks:
   basic_rag:
     driver: bridge
@@ -120,3 +155,5 @@ volumes:
   redis_data:
   chroma_data:
   postgres_data:
+  prometheus_data:
+  grafana_data:
