@@ -117,7 +117,8 @@ def check_input_length() -> Status:
 def check_jwt_secret() -> Status:
     config = _read("app/core/config.py")
     has_insecure_default = "change-this-secret-key-in-production" in config
-    return _status(not has_insecure_default, partial=True)
+    requires_key = "JWT_SECRET_KEY must be set" in config
+    return _status(requires_key and not has_insecure_default, partial=not has_insecure_default)
 
 
 def check_nested_thread_id() -> Status:

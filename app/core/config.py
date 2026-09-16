@@ -6,12 +6,31 @@ from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(_PROJECT_ROOT / ".env", override=False)
+
+_MIN_JWT_SECRET_LENGTH = 32
 
 
 def _optional_env(name: str) -> str | None:
     value = os.getenv(name, "").strip()
     return value or None
+
+
+def _require_jwt_secret() -> str:
+    """Return JWT_SECRET_KEY; refuse missing, blank, or short values."""
+    value = os.getenv("JWT_SECRET_KEY", "").strip()
+    if not value:
+        raise ValueError(
+            "JWT_SECRET_KEY must be set. Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+        )
+    if len(value) < _MIN_JWT_SECRET_LENGTH:
+        raise ValueError(
+            "JWT_SECRET_KEY must be at least "
+            f"{_MIN_JWT_SECRET_LENGTH} characters."
+        )
+    return value
 
 
 def _env_flag(name: str, default: str = "false") -> bool:
@@ -100,9 +119,7 @@ class Settings:
             mysql_password=os.getenv("MYSQL_PASSWORD", ""),
             mysql_database=os.getenv("MYSQL_DATABASE", "rag_db"),
             # JWT
-            jwt_secret_key=os.getenv(
-                "JWT_SECRET_KEY", "change-this-secret-key-in-production"
-            ),
+            jwt_secret_key=_require_jwt_secret(),
             jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
             jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "60")),
             # Top-K retrieval settings
