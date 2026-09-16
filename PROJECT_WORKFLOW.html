@@ -384,6 +384,85 @@
   .mermaid { text-align: center; overflow-x: auto; }
   .mermaid svg { max-width: 100%; height: auto; }
 
+  /* ---------- tabs ---------- */
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .tab-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--panel); border: 1px solid var(--border);
+    color: var(--text-dim); border-radius: 10px; padding: 9px 14px;
+    font: 600 12.5px var(--sans); cursor: pointer;
+    transition: color .18s, border-color .18s, background .18s, transform .18s;
+  }
+  .tab-btn:hover { color: var(--text); border-color: var(--border-strong); transform: translateY(-1px); }
+  .tab-btn[aria-selected="true"] {
+    color: var(--text); border-color: var(--accent);
+    background: linear-gradient(135deg, rgba(94,234,212,.16), rgba(139,123,255,.12));
+  }
+  .tab-btn .cnt { font: 600 10.5px var(--mono); color: var(--text-faint); }
+  .tab-panel[hidden] { display: none; }
+  /* Mermaid measures text, so a diagram inside display:none renders as a syntax error.
+     During the render pass hidden panels are laid out but invisible instead. */
+  .tab-panel.prerender {
+    display: block !important;
+    position: absolute; left: 0; right: 0;
+    visibility: hidden; pointer-events: none;
+  }
+
+  /* ---------- explorer ---------- */
+  #s-explorer { position: relative; }
+  .explorer { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .tree-panel, .detail-panel {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--panel); box-shadow: var(--shadow); padding: 16px 18px;
+  }
+  .detail-panel { position: sticky; top: 24px; }
+  .tree-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .tree-toolbar input {
+    flex: 1 1 170px; min-width: 140px;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 9px;
+    color: var(--text); font: 400 13px var(--sans); padding: 8px 11px; outline: 0;
+  }
+  .tree-toolbar input:focus { border-color: var(--accent); }
+  .tree-toolbar .chip-btn { flex: 0 0 auto; }
+
+  .tree { font-size: 13.5px; }
+  .tree .kids { margin-left: 13px; padding-left: 14px; border-left: 1px dashed var(--border-strong); }
+  .tree summary, .tree .leaf {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    padding: 5px 9px; margin: 1px 0; border-radius: 8px; cursor: pointer;
+    color: var(--text-dim); list-style: none;
+    transition: background .15s, color .15s;
+  }
+  .tree summary::-webkit-details-marker { display: none; }
+  .tree summary:hover, .tree .leaf:hover { background: rgba(139,123,255,.10); color: var(--text); }
+  .tree .chev { width: 11px; height: 11px; flex: none; color: var(--text-faint); transition: transform .18s; }
+  .tree details[open] > summary .chev { transform: rotate(90deg); }
+  .tree .leaf .chev { visibility: hidden; }
+  .tree .label { font-weight: 550; color: var(--text); }
+  .tree .meta { font: 500 11px var(--mono); color: var(--text-faint); }
+  .tree .sel { background: linear-gradient(90deg, rgba(94,234,212,.20), transparent); color: var(--text); }
+  .tree .hide { display: none; }
+  .tree-empty { color: var(--text-faint); font-size: 13px; padding: 8px 9px; }
+
+  .badge {
+    font: 600 10px var(--mono); letter-spacing: .05em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--border-strong); color: var(--text-faint);
+  }
+  .badge.approve { color: var(--warn); border-color: rgba(251,191,36,.42); background: rgba(251,191,36,.10); }
+  .badge.read { color: var(--ok); border-color: rgba(74,222,128,.36); background: rgba(74,222,128,.10); }
+  .badge.tenant { color: var(--accent); border-color: rgba(94,234,212,.36); background: rgba(94,234,212,.10); }
+  .badge.node { color: var(--accent-2); border-color: rgba(139,123,255,.40); background: rgba(139,123,255,.12); }
+  .badge.store { color: var(--accent-3); border-color: rgba(240,171,252,.36); background: rgba(240,171,252,.10); }
+
+  .detail-panel h4 { margin: 0; font-size: 15.5px; letter-spacing: -.015em; }
+  .detail-panel .path { display: block; margin-top: 5px; font: 500 11.5px var(--mono); color: var(--accent); word-break: break-all; }
+  .detail-panel .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .detail-panel p { margin: 13px 0 0; font-size: 13.6px; }
+  .detail-panel dl { margin: 15px 0 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; font-size: 13px; }
+  .detail-panel dt { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); padding-top: 2px; }
+  .detail-panel dd { margin: 0; color: var(--text-dim); word-break: break-word; }
+
   /* ---------- footer ---------- */
   footer {
     margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--border);
@@ -413,8 +492,15 @@
     nav { max-height: 300px; }
     header.hero { padding: 34px 26px; margin-top: 22px; }
   }
+  @media (max-width: 900px) {
+    .explorer { grid-template-columns: 1fr; }
+    .detail-panel { position: static; }
+  }
 
   @media print {
+    .tabs, .tree-toolbar { display: none !important; }
+    .tab-panel[hidden] { display: block !important; }
+    .explorer { grid-template-columns: 1fr; }
     .aurora, .grid-lines, aside, #top-btn, #progress, .copy { display: none !important; }
     .shell { display: block; max-width: none; padding: 0; }
     body { background: #fff; color: #000; }
@@ -448,16 +534,19 @@
       <a href="#s2"><span class="num">02</span>Layout</a>
       <a href="#s3"><span class="num">03</span>How a chat turn runs</a>
       <a href="#s4"><span class="num">04</span>Master graph</a>
-      <a href="#s5"><span class="num">05</span>Nested RAG graph</a>
-      <a href="#s6"><span class="num">06</span>Ingest graph</a>
-      <a href="#s7"><span class="num">07</span>Compose topology</a>
-      <a href="#s8"><span class="num">08</span>All HTTP endpoints</a>
-      <a href="#s9"><span class="num">09</span>Guardrails</a>
-      <a href="#s10"><span class="num">10</span>Memory</a>
-      <a href="#s11"><span class="num">11</span>How to run</a>
-      <a href="#s12"><span class="num">12</span>Logs, graphs, traces</a>
-      <a href="#s13"><span class="num">13</span>Environment</a>
-      <a href="#s14"><span class="num">14</span>Non-negotiables</a>
+      <a href="#s-tools"><span class="num">05</span>Agent tools</a>
+      <a href="#s-orders"><span class="num">06</span>Order workflow</a>
+      <a href="#s-explorer"><span class="num">07</span>Architecture explorer</a>
+      <a href="#s5"><span class="num">08</span>Nested RAG graph</a>
+      <a href="#s6"><span class="num">09</span>Ingest graph</a>
+      <a href="#s7"><span class="num">10</span>Compose topology</a>
+      <a href="#s8"><span class="num">11</span>All HTTP endpoints</a>
+      <a href="#s9"><span class="num">12</span>Guardrails</a>
+      <a href="#s10"><span class="num">13</span>Memory</a>
+      <a href="#s11"><span class="num">14</span>How to run</a>
+      <a href="#s12"><span class="num">15</span>Logs, graphs, traces</a>
+      <a href="#s13"><span class="num">16</span>Environment</a>
+      <a href="#s14"><span class="num">17</span>Non-negotiables</a>
     </nav>
 
     <div class="side-foot">
@@ -488,6 +577,8 @@
         <div class="fact"><div class="k">Retrieval</div><div class="v">Hybrid <small>dense + BM25 + RRF</small></div></div>
         <div class="fact"><div class="k">UI port</div><div class="v">8002 <small>/ 8501 local</small></div></div>
         <div class="fact"><div class="k">Auth</div><div class="v">JWT <small>Bearer, ≥32 chars</small></div></div>
+        <div class="fact"><div class="k">Agent tools</div><div class="v">11 <small>scoped per specialist</small></div></div>
+        <div class="fact"><div class="k">Order writes</div><div class="v">HITL <small>exact confirm phrase</small></div></div>
       </div>
     </header>
 
@@ -583,20 +674,25 @@ flowchart LR
 ├── track_production.py     <span class="tok-c">Regenerates PRODUCTION_TRACKER.md</span>
 ├── database/
 │   ├── sqlite.py           <span class="tok-c">Postgres engine + init_db (SQLAlchemy postgresql+psycopg)</span>
-│   └── models.py           <span class="tok-c">User, Document, MemoryRecord</span>
+│   ├── models.py           <span class="tok-c">User, Document, MemoryRecord</span>
+│   ├── order_models.py     <span class="tok-c">Order, OrderItem — isolated order demo schema</span>
+│   ├── order_store.py      <span class="tok-c">OrderRepository: tenant-scoped reads/writes, CAS updates</span>
+│   └── seed_orders.py      <span class="tok-c">python -m database.seed_orders --user-id &lt;id&gt;</span>
 ├── frontend/               <span class="tok-c">Streamlit: login, ingest, chat SSE client</span>
 ├── evals/                  <span class="tok-c">Golden set, Ragas, DeepEval stand-in, MLflow log</span>
 ├── observability/          <span class="tok-c">Prometheus scrape + Grafana dashboard JSON</span>
 ├── app/
 │   ├── api/                <span class="tok-c">HTTP: auth, documents, chat, session_access, dependencies</span>
-│   ├── agent/multi_agent/  <span class="tok-c">Master graph, supervisor, specialists</span>
+│   ├── agent/multi_agent/  <span class="tok-c">Master graph, supervisor, state (pending_order_action)</span>
+│   │   └── specialists/    <span class="tok-c">rag.py, sql.py, web.py, general.py (one file per agent)</span>
+│   ├── prompts/            <span class="tok-c">specialist_prompts.py — versioned system prompts</span>
 │   ├── services/rag/       <span class="tok-c">Nested CRAG graph</span>
 │   ├── services/retriever/ <span class="tok-c">dense, bm25, hybrid, knowledge_graph, reranker</span>
-│   ├── services/llm/       <span class="tok-c">Claude</span>
-│   ├── services/cache/     <span class="tok-c">Redis answer cache</span>
+│   ├── services/llm/       <span class="tok-c">Claude (temperature 0, timeout, retry, usage log)</span>
+│   ├── services/cache/     <span class="tok-c">Redis answer cache + order bypass policy</span>
 │   ├── guardrails/         <span class="tok-c">Input/output rails, NeMo, Presidio, jailbreak</span>
 │   ├── memory/             <span class="tok-c">Long-term extract + persist</span>
-│   ├── tools/              <span class="tok-c">document_search, web_search, sql_*, invoke_tool</span>
+│   ├── tools/              <span class="tok-c">registry (allowlists), order_tools, utility_tools, web_read, execute</span>
 │   ├── mcp/server.py       <span class="tok-c">MCP stdio: health, ask_rag</span>
 │   ├── core/               <span class="tok-c">config, logger, audit, metrics, rate_limit, langfuse_tracer</span>
 │   └── tasks/              <span class="tok-c">Celery ingest</span></code></pre>
@@ -625,23 +721,29 @@ sequenceDiagram
     U-&gt;&gt;API: JWT + question + optional session_id
     API-&gt;&gt;RL: 10/minute chat, 60/minute default
     API-&gt;&gt;API: ensure_session_owner / new session_uuid
-    API-&gt;&gt;Cache: rag:answer:{user_id}:{sha256}
+    API-&gt;&gt;G: aget_state pending_order_action (error = bypass)
+    API-&gt;&gt;Cache: rag:answer:{user_id}:{sha256} unless bypass
     alt cache hit
         Cache--&gt;&gt;U: SSE token + done
-    else miss
-        API-&gt;&gt;G: ainvoke max_iterations=2
+    else miss or bypass
+        API-&gt;&gt;G: ainvoke max_iterations=2 within 60s budget
         G-&gt;&gt;G: validate_input then load_memory
-        G-&gt;&gt;G: supervisor routes specialist
+        G-&gt;&gt;G: supervisor routes one specialist
         opt rag_agent
             G-&gt;&gt;RAG: ainvoke skip_generate thread_id session:rag
             RAG--&gt;&gt;G: context chunks
         end
         G-&gt;&gt;G: synthesize then validate_output then save_memory
-        G--&gt;&gt;API: trajectory + memories
-        API-&gt;&gt;LLM: stream tokens from context
-        LLM--&gt;&gt;U: SSE type=token (many)
-        API-&gt;&gt;Rails: grounding + PII
-        API-&gt;&gt;Cache: SETEX
+        G--&gt;&gt;API: trajectory + memories + pending_order_action
+        alt direct_response (sql, web, general, empty RAG)
+            API-&gt;&gt;API: buffer specialist answer as-is
+        else grounded RAG answer
+            API-&gt;&gt;LLM: generate_stream over fenced context
+            LLM--&gt;&gt;API: buffered tokens
+        end
+        API-&gt;&gt;Rails: grounding + PII before any token leaves
+        API--&gt;&gt;U: SSE type=token (many)
+        API-&gt;&gt;Cache: SETEX only when not operational
         API--&gt;&gt;U: SSE type=done
         API-&gt;&gt;Mem: background persist_from_turn
     end
@@ -653,14 +755,15 @@ sequenceDiagram
           <li><strong>Auth.</strong> <code>Authorization: Bearer &lt;jwt&gt;</code>. Missing/invalid → 401. Rate limit exceeded → 429.</li>
           <li><strong>Session.</strong> Empty question → 400. If <code>session_id</code> exists and belongs to another user → 404. Else reuse or mint <code>session_&lt;uuid&gt;</code>.</li>
           <li><strong>Keepalive.</strong> First SSE line is <code>: keepalive</code> so the UI is not stuck while models load.</li>
-          <li><strong>Cache.</strong> Redis key <code>rag:answer:{user_id}:{sha256(normalized question)}</code>. Hit skips the graphs (fail-open if Redis is down).</li>
+          <li><strong>Cache.</strong> Redis key <code>rag:answer:{user_id}:{sha256(normalized question)}</code>. Hit skips the graphs (fail-open if Redis is down). <strong>Bypassed</strong> for order traffic, confirmation phrases, and any turn with a pending order draft; checkpoint-inspection errors also bypass, so a stale answer can never stand in for a live order turn.</li>
           <li><strong>Master graph</strong> (<code>get_master_agent_graph</code>, compiled once). Checkpointer is <code>AsyncPostgresSaver</code> on <code>DATABASE_URL</code>. <code>thread_id</code> is the session id. Metadata includes <code>user_id</code> for ownership.</li>
           <li><strong>Input rails.</strong> Length cap 10k. Jailbreak denylist always. NeMo injection when enabled and ready. Presidio on input when spaCy loads.</li>
           <li><strong>Long-term memory load.</strong> Up to 10 <code>user_memories</code> rows for this <code>user_id</code>.</li>
-          <li><strong>Supervisor.</strong> Cheap keyword router first; LLM <code>agenerate_structured(SupervisorDecision)</code> if ambiguous. After one specialist this turn, next hop is <code>FINISH</code>. Cap <code>max_iterations=2</code>.</li>
+          <li><strong>Supervisor.</strong> Cheap keyword router first; LLM <code>agenerate_structured(SupervisorDecision)</code> if ambiguous. After one specialist this turn, next hop is <code>FINISH</code>. Cap <code>max_iterations=2</code> plus a 60-second wall clock on <code>ainvoke</code>. A pending order draft pins the turn to <code>sql_agent</code> only when the message is a confirmation, cancellation, or draft detail — unrelated questions still route normally.</li>
           <li><strong>RAG specialist.</strong> Nested graph with <code>skip_generate=True</code> and <code>skip_memory_persist=True</code>, <code>thread_id="{session}:rag"</code> so checkpoints do not collide. Retrieve is <strong>pre-filtered</strong> by <code>user_id</code>. Fallback tool: <code>document_search</code>.</li>
-          <li><strong>SQL / web / general.</strong> Read-only SQL (denied tables include <code>users</code>, <code>user_memories</code>, checkpoints). Web: Tavily if <code>TAVILY_API_KEY</code> else DuckDuckGo. General: Claude + memories. Tools go through <code>invoke_tool</code> (audit + <code>requires_approval</code> for future write tools).</li>
-          <li><strong>Synthesize</strong> then <strong>output rails</strong> on the supervisor answer; chat then <strong>re-generates</strong> with <code>generate_stream</code> so the UI sees tokens. Grounding = token overlap vs specialist context. Presidio may anonymize.</li>
+          <li><strong>SQL / order specialist.</strong> Model-written SQL against application tables is disabled. The specialist calls typed order tools only: <code>get_order</code>, <code>list_orders</code>, <code>order_analytics</code>, and the approval-gated <code>create_order</code> / <code>update_order</code>. Intent comes from a Pydantic <code>OrderIntentV1</code> at temperature 0; a schema failure keeps the draft untouched and asks again.</li>
+          <li><strong>Web / general.</strong> Web reads an explicit URL through the SSRF-guarded <code>read_web_page</code>, otherwise Tavily (if <code>TAVILY_API_KEY</code>) or DuckDuckGo. General uses deterministic <code>calculate</code> / <code>current_datetime</code> when the request matches, then Claude. Every call goes through <code>invoke_tool</code>, which overwrites <code>user_id</code> with the authenticated subject, enforces <code>requires_approval</code>, and audits the call.</li>
+          <li><strong>Synthesize</strong>, then <strong>output rails</strong>. Tokens are <strong>buffered until the rails pass</strong>, so blocked or anonymized text never reaches the client mid-stream. Specialist answers that are already final (SQL, web, general, empty-context RAG) stream verbatim; grounded RAG answers get one <code>generate_stream</code> pass over fenced, untrusted context.</li>
           <li><strong>SSE <code>done</code>.</strong> <code>session_id</code>, question, answer, iterations, <code>agent_trajectory</code>, <code>guardrail_metadata</code>.</li>
           <li><strong>Save memory.</strong> Background thread extracts ADD/UPDATE/IGNORE (<code>semantic</code> / <code>episodic</code> allowed) into Postgres.</li>
           <li><strong>Audit / metrics / traces.</strong> <code>audit_event</code> (no raw PII). <code>inc_chat(ok|cache|blocked|error)</code>. LangSmith if tracing env is set. Langfuse if keys are set.</li>
@@ -674,7 +777,7 @@ sequenceDiagram
           <tbody>
             <tr><td><code>token</code></td><td>Incremental Claude text (<code>content</code>)</td></tr>
             <tr><td><code>done</code></td><td>Full payload; UI stores <code>session_id</code></td></tr>
-            <tr><td><code>error</code></td><td>User-visible failure or safety block</td></tr>
+            <tr><td><code>error</code></td><td>Transport or upstream failure. A safety block is <em>not</em> an error: it sends a safe <code>token</code> plus a normal <code>done</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -685,7 +788,11 @@ sequenceDiagram
       <div class="sec-head"><span class="sec-num">04</span><h2>Master graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(only chat pipeline)</span></h2></div>
       <div class="rule"></div>
 
-      <p>Compiled in <code>build_master_agent_graph</code>. Specialists always return to the supervisor so it can <code>FINISH</code>.</p>
+      <p>
+        Compiled in <code>build_master_agent_graph</code>. Specialists always return to the supervisor so it can <code>FINISH</code>.
+        Node names and topology are unchanged; the four specialist bodies now live in
+        <code>app/agent/multi_agent/specialists/</code>, while <code>nodes.py</code> keeps the guardrail, memory, and error nodes.
+      </p>
 
       <div class="diagram">
         <div class="cap"><b>Master supervisor graph</b><i>build_master_agent_graph</i></div>
@@ -696,6 +803,7 @@ flowchart TD
     validate_input --&gt;|continue| load_memory
     load_memory --&gt; supervisor
 
+    supervisor --&gt;|pending order confirm/cancel/detail| sql_agent
     supervisor --&gt;|rag_agent| rag_agent
     supervisor --&gt;|sql_agent| sql_agent
     supervisor --&gt;|web_agent| web_agent
@@ -722,10 +830,10 @@ flowchart TD
             <tr><td><code>validate_input</code></td><td>Length, jailbreak, optional NeMo, optional Presidio</td></tr>
             <tr><td><code>load_memory</code></td><td>Postgres long-term facts</td></tr>
             <tr><td><code>supervisor</code></td><td>Route + <code>synthesize</code></td></tr>
-            <tr><td><code>rag_agent</code></td><td>Nested hybrid CRAG</td></tr>
-            <tr><td><code>sql_agent</code></td><td>Schema → SELECT → summary</td></tr>
-            <tr><td><code>web_agent</code></td><td>Live search then grounded summary</td></tr>
-            <tr><td><code>general_agent</code></td><td>Direct Claude</td></tr>
+            <tr><td><code>rag_agent</code></td><td>Nested hybrid CRAG, or <code>list_user_documents</code> for list-style asks (<code>specialists/rag.py</code>)</td></tr>
+            <tr><td><code>sql_agent</code></td><td>Order reads, analytics, and confirmation-gated writes (<code>specialists/sql.py</code>)</td></tr>
+            <tr><td><code>web_agent</code></td><td>Explicit URL read or live search, then grounded summary (<code>specialists/web.py</code>)</td></tr>
+            <tr><td><code>general_agent</code></td><td>Deterministic calculator / clock tools, then Claude (<code>specialists/general.py</code>)</td></tr>
             <tr><td><code>validate_output</code></td><td>Grounding + PII on supervisor text</td></tr>
             <tr><td><code>save_memory</code></td><td>Async extract/persist</td></tr>
             <tr><td><code>error_handler</code></td><td>Safe refusal</td></tr>
@@ -740,8 +848,367 @@ flowchart TD
     </section>
 
     <!-- ============ 5 ============ -->
+    <section id="s-tools" class="reveal">
+      <div class="sec-head"><span class="sec-num">05</span><h2>Agent tools <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(scoped per specialist)</span></h2></div>
+      <div class="rule"></div>
+
+      <p>
+        <code>app/tools/registry.py</code> holds one allowlist per agent in <code>AGENT_TOOL_NAMES</code>.
+        A specialist asks for a tool through <code>get_tool_for_agent(agent, tool)</code>, so a tool that is not on
+        that agent's list is never returned — cross-agent reach is a lookup failure, not a policy note.
+      </p>
+
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Tool</th><th>Agent</th><th>Input schema</th><th>Gate</th></tr></thead>
+          <tbody>
+            <tr><td><code>document_search</code></td><td><code>rag_agent</code></td><td><code>DocumentSearchInput</code></td><td><span class="yes">Read</span> · tenant pre-filter</td></tr>
+            <tr><td><code>list_user_documents</code></td><td><code>rag_agent</code></td><td><code>ListUserDocumentsInput</code></td><td><span class="yes">Read</span> · owner rows only</td></tr>
+            <tr><td><code>get_order</code></td><td><code>sql_agent</code></td><td><code>GetOrderInput</code></td><td><span class="yes">Read</span> · owner rows only</td></tr>
+            <tr><td><code>list_orders</code></td><td><code>sql_agent</code></td><td><code>ListOrdersInput</code> — <code>days</code> 1–365, status enum, <code>limit</code> ≤ 100</td><td><span class="yes">Read</span> · defaults to last 10 days</td></tr>
+            <tr><td><code>order_analytics</code></td><td><code>sql_agent</code></td><td><code>OrderAnalyticsInput</code></td><td><span class="yes">Read</span> · parameterized aggregate</td></tr>
+            <tr><td><code>create_order</code></td><td><code>sql_agent</code></td><td><code>CreateOrderInput</code> + idempotency key</td><td><span class="maybe">Write</span> · <code>requires_approval</code></td></tr>
+            <tr><td><code>update_order</code></td><td><code>sql_agent</code></td><td><code>UpdateOrderInput</code> + <code>expected_version</code></td><td><span class="maybe">Write</span> · <code>requires_approval</code></td></tr>
+            <tr><td><code>web_search</code></td><td><code>web_agent</code></td><td><code>WebSearchInput</code></td><td><span class="yes">Read</span> · Tavily then DuckDuckGo</td></tr>
+            <tr><td><code>read_web_page</code></td><td><code>web_agent</code></td><td><code>WebPageReadInput</code></td><td><span class="yes">Read</span> · SSRF-guarded fetch</td></tr>
+            <tr><td><code>calculate</code></td><td><code>general_agent</code></td><td><code>CalculatorInput</code></td><td><span class="yes">Pure</span> · AST whitelist, no <code>eval</code></td></tr>
+            <tr><td><code>current_datetime</code></td><td><code>general_agent</code></td><td><code>CurrentDateTimeInput</code></td><td><span class="yes">Pure</span> · validated IANA zone</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>What every call passes through</h3>
+      <div class="card">
+        <ul class="plain" style="margin:0">
+          <li><strong>Tenant identity is injected, not requested.</strong> <code>invoke_tool</code> overwrites <code>user_id</code> with the authenticated subject for every tenant-scoped tool and raises when there is no authenticated user. <code>user_id</code> is hidden from the JSON schema the model sees, so it cannot be chosen by a model argument.</li>
+          <li><strong>Writes need explicit approval.</strong> <code>requires_approval</code> tools return a refusal string unless the caller passes <code>approved=True</code>, which only the verified confirmation branch does.</li>
+          <li><strong>Every call is audited.</strong> <code>tool.call</code>, <code>tool.done</code>, <code>tool.error</code>, and <code>tool.denied</code> record the tool name and session without payloads.</li>
+          <li><strong>The web reader is pinned.</strong> The hostname is resolved once, non-global addresses (including IPv4-mapped and NAT64 forms), credentials in the URL, and cloud metadata hosts are rejected, and the request connects to that validated IP with TLS hostname verification. Redirects re-run the same check, capped at three hops and 1&nbsp;MB.</li>
+        </ul>
+      </div>
+
+      <div class="callout stop">
+        <div class="ico">⛔</div>
+        <p>
+          Model-written SQL against application tables is <strong>disabled</strong>. The SQL specialist answers
+          general database questions with a refusal and reaches order data only through the typed repository methods above,
+          so <code>users</code>, <code>documents</code>, and checkpoint tables are unreachable from chat.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section id="s-orders" class="reveal">
+      <div class="sec-head"><span class="sec-num">06</span><h2>Order workflow <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(human confirmation)</span></h2></div>
+      <div class="rule"></div>
+
+      <p>
+        Orders live in their own SQLite file (<code>ORDER_DATABASE_URL</code>, default <code>data/orders_demo.db</code> under the project root)
+        and never mix with Postgres application state. Writes are two-step: the agent drafts, the human confirms with an exact phrase,
+        and only that verified branch executes.
+      </p>
+
+      <div class="diagram">
+        <div class="cap"><b>Draft lifecycle</b><i>pending_order_action in the LangGraph checkpoint</i></div>
+        <pre class="mermaid">
+stateDiagram-v2
+    [*] --&gt; collecting: write intent detected
+    collecting --&gt; collecting: detail supplied, still incomplete
+    collecting --&gt; awaiting_confirmation: all fields present, payload sealed with hash
+    awaiting_confirmation --&gt; awaiting_confirmation: plain yes, or wrong action id
+    awaiting_confirmation --&gt; executed: confirm order act_xxxxxxxx
+    awaiting_confirmation --&gt; cancelled: cancel order act_xxxxxxxx
+    collecting --&gt; expired: 15 minute TTL
+    awaiting_confirmation --&gt; expired: 15 minute TTL
+    executed --&gt; [*]
+    cancelled --&gt; [*]
+    expired --&gt; [*]
+        </pre>
+      </div>
+
+      <div class="diagram">
+        <div class="cap"><b>Three-turn write</b><i>incomplete → details → confirmation → execute</i></div>
+        <pre class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant API as POST /chat/
+    participant SQL as sql_agent
+    participant CP as Checkpoint
+    participant DB as orders_demo.db
+
+    U-&gt;&gt;API: create an order for two widgets
+    API-&gt;&gt;SQL: route (cache bypassed)
+    SQL-&gt;&gt;CP: draft act_1a2b3c4d phase=collecting
+    SQL--&gt;&gt;U: which shipping address should I use
+
+    U-&gt;&gt;API: ship it to 1 Main Street
+    API-&gt;&gt;SQL: merge detail into the same draft
+    SQL-&gt;&gt;CP: phase=awaiting_confirmation, payload hash sealed
+    SQL--&gt;&gt;U: summary plus type confirm order act_1a2b3c4d
+
+    U-&gt;&gt;API: confirm order act_1a2b3c4d
+    SQL-&gt;&gt;SQL: verify owner, session, expiry, action id, payload hash
+    SQL-&gt;&gt;DB: invoke_tool create_order approved=true
+    DB--&gt;&gt;SQL: order row (idempotent on replay)
+    SQL-&gt;&gt;CP: clear pending_order_action
+    SQL--&gt;&gt;U: confirmed and executed
+        </pre>
+      </div>
+
+      <h3>Pending action record</h3>
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Field</th><th>Why it exists</th></tr></thead>
+          <tbody>
+            <tr><td><code>action_id</code></td><td>The exact token the user must repeat; a mismatch never executes</td></tr>
+            <tr><td><code>user_id</code> / <code>session_id</code></td><td>Binds the draft to one tenant and one thread; another session cannot confirm it</td></tr>
+            <tr><td><code>tool_name</code></td><td><code>create_order</code> or <code>update_order</code> only</td></tr>
+            <tr><td><code>payload</code> / <code>payload_hash</code></td><td>The reviewed values and their seal. If the payload changes after review, confirmation is refused</td></tr>
+            <tr><td><code>missing_fields</code></td><td>Drives the precise follow-up question instead of a generic retry</td></tr>
+            <tr><td><code>phase</code></td><td><code>collecting</code> or <code>awaiting_confirmation</code>; a sealed draft stops absorbing edits</td></tr>
+            <tr><td><code>expires_at</code></td><td>15-minute TTL, checked before every action</td></tr>
+            <tr><td><code>idempotency_key</code></td><td>Session, action, and payload digest, so a duplicate confirmation returns the same order</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Storage guarantees</h3>
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Concern</th><th>How it is handled</th></tr></thead>
+          <tbody>
+            <tr><td>Tenant isolation</td><td>Every repository query filters on <code>user_id</code>; a foreign order id simply returns nothing</td></tr>
+            <tr><td>Concurrent updates</td><td><code>UPDATE … WHERE version = expected_version</code>; <code>rowcount != 1</code> means no write and a stale-version answer</td></tr>
+            <tr><td>Duplicate creates</td><td>Unique <code>(user_id, idempotency_key)</code>, integrity-error replay returns the committed row, and a reused key with different values is rejected</td></tr>
+            <tr><td>SQLite concurrency</td><td>WAL, <code>busy_timeout</code>, foreign keys on, and <code>NullPool</code> (<code>StaticPool</code> in memory)</td></tr>
+            <tr><td>Demo data</td><td><code>python -m database.seed_orders --user-id &lt;id&gt;</code> writes 30 deterministic days; re-running is idempotent</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Audit trail</h3>
+      <p>
+        Each stage emits a structured event with the action id and tool name and <strong>no</strong> address or line-item payload:
+        <code>order.draft_created</code>, <code>order.details_required</code>, <code>order.confirmation_required</code>,
+        <code>order.confirmation_denied</code>, <code>order.draft_cancelled</code>, <code>order.draft_expired</code>,
+        and <code>order.write_executed</code>.
+      </p>
+
+      <div class="callout warn">
+        <div class="ico">✋</div>
+        <p>
+          A plain <strong>“yes”</strong> never writes. Neither does a confirmation with the wrong action id, from another session,
+          after expiry, or against a draft whose payload changed after you reviewed it.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section id="s-explorer" class="reveal">
+      <div class="sec-head"><span class="sec-num">07</span><h2>Architecture explorer <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(click to expand)</span></h2></div>
+      <div class="rule"></div>
+
+      <p>
+        Three views of the same turn: a collapsible tree you can click through, the full end-to-end graph,
+        and the binary decision graph that decides what actually happens to a request.
+      </p>
+
+      <div class="tabs" role="tablist" aria-label="Architecture views" data-tabs>
+        <button class="tab-btn" type="button" role="tab" id="tab-tree" aria-controls="panel-tree" aria-selected="true">Agent tree <span class="cnt">click · collapse</span></button>
+        <button class="tab-btn" type="button" role="tab" id="tab-graph" aria-controls="panel-graph" aria-selected="false">Full system graph <span class="cnt">end to end</span></button>
+        <button class="tab-btn" type="button" role="tab" id="tab-decision" aria-controls="panel-decision" aria-selected="false">Binary decision graph <span class="cnt">yes · no</span></button>
+      </div>
+
+      <div class="tab-panel" id="panel-tree" role="tabpanel" aria-labelledby="tab-tree">
+        <div class="explorer">
+          <div class="tree-panel">
+            <div class="tree-toolbar">
+              <input id="treeq" type="search" placeholder="Filter nodes, tools, files…" autocomplete="off" />
+              <button class="chip-btn" id="treeExpand" type="button">Expand all</button>
+              <button class="chip-btn" id="treeCollapse" type="button">Collapse all</button>
+            </div>
+            <div class="tree" id="tree"></div>
+          </div>
+          <div class="detail-panel" id="nodeDetail"></div>
+        </div>
+        <noscript>
+          <div class="callout warn" style="margin-top:16px">
+            <div class="ico">ℹ️</div>
+            <p>The tree needs JavaScript. The two diagram tabs and every table above still describe the same structure.</p>
+          </div>
+        </noscript>
+      </div>
+
+      <div class="tab-panel" id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" hidden>
+        <div class="diagram">
+          <div class="cap"><b>Full system graph</b><i>clients → API → graph → specialists → tools → stores</i></div>
+          <pre class="mermaid">
+flowchart TB
+    subgraph clients [Clients]
+        UI[Streamlit chat]
+        MCP[MCP ask_rag]
+    end
+
+    subgraph edge [FastAPI POST /chat/]
+        AuthZ[JWT and session owner]
+        Gate[Cache policy and order bypass]
+        Emit[Buffered SSE token then done]
+    end
+
+    subgraph master [Master LangGraph]
+        VIn[validate_input]
+        LMem[load_memory]
+        Sup[supervisor]
+        Syn[synthesize]
+        VOut[validate_output]
+        SMem[save_memory]
+        Err[error_handler]
+    end
+
+    subgraph agents [Specialists]
+        RAGA[rag_agent]
+        SQLA[sql_agent]
+        WEBA[web_agent]
+        GENA[general_agent]
+    end
+
+    subgraph registry [Registry allowlist]
+        D1[document_search]
+        D2[list_user_documents]
+        O1[get_order]
+        O2[list_orders]
+        O3[order_analytics]
+        O4[create_order approval]
+        O5[update_order approval]
+        W1[web_search]
+        W2[read_web_page]
+        G1[calculate]
+        G2[current_datetime]
+    end
+
+    subgraph data [Stores]
+        PG[(Postgres state and checkpoints)]
+        CH[(Chroma vectors)]
+        BM[(SQLite FTS5 BM25)]
+        RD[(Redis cache)]
+        OD[(orders_demo.db)]
+    end
+
+    UI --&gt; AuthZ
+    MCP --&gt; AuthZ
+    AuthZ --&gt; Gate
+    Gate --&gt; VIn
+    Gate --&gt; RD
+
+    VIn --&gt;|blocked| Err
+    VIn --&gt;|clean| LMem
+    LMem --&gt; Sup
+    LMem --&gt; PG
+
+    Sup --&gt; RAGA
+    Sup --&gt; SQLA
+    Sup --&gt; WEBA
+    Sup --&gt; GENA
+    RAGA --&gt; Sup
+    SQLA --&gt; Sup
+    WEBA --&gt; Sup
+    GENA --&gt; Sup
+    Sup --&gt; Syn
+    Syn --&gt; VOut
+    VOut --&gt;|pass| SMem
+    VOut --&gt;|block| Err
+    SMem --&gt; Emit
+    Err --&gt; Emit
+
+    RAGA --&gt; D1
+    RAGA --&gt; D2
+    SQLA --&gt; O1
+    SQLA --&gt; O2
+    SQLA --&gt; O3
+    SQLA --&gt; O4
+    SQLA --&gt; O5
+    WEBA --&gt; W1
+    WEBA --&gt; W2
+    GENA --&gt; G1
+    GENA --&gt; G2
+
+    D1 --&gt; CH
+    D1 --&gt; BM
+    D2 --&gt; PG
+    O1 --&gt; OD
+    O2 --&gt; OD
+    O3 --&gt; OD
+    O4 --&gt; OD
+    O5 --&gt; OD
+    SMem --&gt; PG
+          </pre>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-decision" role="tabpanel" aria-labelledby="tab-decision" hidden>
+        <div class="diagram">
+          <div class="cap"><b>Binary decision graph</b><i>every yes / no branch in one turn</i></div>
+          <pre class="mermaid">
+flowchart TD
+    S([POST /chat/]) --&gt; A{JWT valid}
+    A --&gt;|no| R401[401 unauthorized]
+    A --&gt;|yes| B{Within rate limit}
+    B --&gt;|no| R429[429 too many requests]
+    B --&gt;|yes| C{Question non empty}
+    C --&gt;|no| R400[400 bad request]
+    C --&gt;|yes| D{Session owned by caller}
+    D --&gt;|no| R404[404 not found]
+    D --&gt;|yes| E{Pending order draft or order wording}
+
+    E --&gt;|yes| G[Bypass cache]
+    E --&gt;|no| F{Cache hit}
+    F --&gt;|yes| CACHED[Replay cached answer then done]
+    F --&gt;|no| G
+
+    G --&gt; H{Input rails pass}
+    H --&gt;|no| SAFE[Safe refusal token then done]
+    H --&gt;|yes| I{Turn continues a pending draft}
+
+    I --&gt;|yes| J{Message is exact confirm phrase}
+    I --&gt;|no| P[Route to one specialist]
+
+    J --&gt;|no| K{Message is exact cancel phrase}
+    J --&gt;|yes| L{Owner, session, expiry, action id, payload hash all valid}
+    K --&gt;|yes| CANCEL[Clear draft and report cancelled]
+    K --&gt;|no| M{All required fields present}
+
+    L --&gt;|no| REFUSE[Refuse and keep or clear draft]
+    L --&gt;|yes| WRITE[invoke_tool approved true, idempotent write]
+
+    M --&gt;|no| ASK[Ask for the missing fields]
+    M --&gt;|yes| SEAL[Seal payload and request exact confirmation]
+
+    P --&gt; Q{Specialist answer already final}
+    Q --&gt;|yes| BUF[Buffer specialist text]
+    Q --&gt;|no| STREAM[Claude generate_stream into buffer]
+
+    WRITE --&gt; N
+    CANCEL --&gt; N
+    ASK --&gt; N
+    SEAL --&gt; N
+    REFUSE --&gt; N
+    BUF --&gt; N
+    STREAM --&gt; N
+
+    N{Output rails pass} --&gt;|no| SAFE
+    N --&gt;|yes| O{Cacheable and not operational}
+    O --&gt;|yes| SETEX[Write Redis entry]
+    O --&gt;|no| SKIP[Skip cache write]
+    SETEX --&gt; OUT[Emit tokens then done]
+    SKIP --&gt; OUT
+          </pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 8 ============ -->
     <section id="s5" class="reveal">
-      <div class="sec-head"><span class="sec-num">05</span><h2>Nested RAG graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(<code>rag_agent</code>)</span></h2></div>
+      <div class="sec-head"><span class="sec-num">08</span><h2>Nested RAG graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(<code>rag_agent</code>)</span></h2></div>
       <div class="rule"></div>
 
       <p><code>build_rag_graph</code> in <code>app/services/rag/graph.py</code>. Under the master, generate is skipped so FastAPI owns streaming.</p>
@@ -792,9 +1259,9 @@ flowchart LR
       </div>
     </section>
 
-    <!-- ============ 6 ============ -->
+    <!-- ============ 9 ============ -->
     <section id="s6" class="reveal">
-      <div class="sec-head"><span class="sec-num">06</span><h2>Ingest graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(documents)</span></h2></div>
+      <div class="sec-head"><span class="sec-num">09</span><h2>Ingest graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(documents)</span></h2></div>
       <div class="rule"></div>
 
       <div class="diagram">
@@ -820,9 +1287,9 @@ flowchart TD
       </div>
     </section>
 
-    <!-- ============ 7 ============ -->
+    <!-- ============ 10 ============ -->
     <section id="s7" class="reveal">
-      <div class="sec-head"><span class="sec-num">07</span><h2>Compose topology <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(Docker)</span></h2></div>
+      <div class="sec-head"><span class="sec-num">10</span><h2>Compose topology <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(Docker)</span></h2></div>
       <div class="rule"></div>
 
       <p>Public product port is <strong>8002</strong> (UI). API is only on the Docker network. Grafana/Prometheus bind <strong>loopback</strong> so they are not on the internet.</p>
@@ -845,9 +1312,9 @@ flowchart TB
       </div>
     </section>
 
-    <!-- ============ 8 ============ -->
+    <!-- ============ 11 ============ -->
     <section id="s8" class="reveal">
-      <div class="sec-head"><span class="sec-num">08</span><h2>All HTTP endpoints</h2></div>
+      <div class="sec-head"><span class="sec-num">11</span><h2>All HTTP endpoints</h2></div>
       <div class="rule"></div>
 
       <p>OpenAPI: <code>http://localhost:8000/docs</code> (local) or via the API container internally. JWT: header <code>Authorization: Bearer &lt;access_token&gt;</code> except register/login/health/metrics.</p>
@@ -912,9 +1379,9 @@ flowchart TB
       </div>
     </section>
 
-    <!-- ============ 9 ============ -->
+    <!-- ============ 12 ============ -->
     <section id="s9" class="reveal">
-      <div class="sec-head"><span class="sec-num">09</span><h2>Guardrails <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(what is wired)</span></h2></div>
+      <div class="sec-head"><span class="sec-num">12</span><h2>Guardrails <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(what is wired)</span></h2></div>
       <div class="rule"></div>
 
       <p><code>dependencies.py</code> builds both input and output services for the <strong>master</strong> graph and nested RAG.</p>
@@ -927,6 +1394,9 @@ flowchart TB
             <tr><td>Jailbreak denylist</td><td><span class="yes">Yes</span> (<code>JailbreakGuardrail</code>)</td></tr>
             <tr><td>NeMo prompt injection</td><td><span class="maybe">Conditional</span> — if <code>ENABLE_NEMO=true</code> and rails load; fail-closed on NeMo errors</td></tr>
             <tr><td>Presidio PII in + out</td><td><span class="maybe">Conditional</span> — if spaCy/Presidio import</td></tr>
+            <tr><td>Rails before streaming</td><td><span class="yes">Yes</span> — tokens are buffered and validated before the first <code>token</code> event</td></tr>
+            <tr><td>Tool approval gate</td><td><span class="yes">Yes</span> — <code>create_order</code> / <code>update_order</code> refuse without <code>approved=True</code></td></tr>
+            <tr><td>Tenant injection on tools</td><td><span class="yes">Yes</span> — <code>invoke_tool</code> overwrites <code>user_id</code> from the JWT</td></tr>
             <tr><td>Output grounding</td><td><span class="yes">Yes</span> — token overlap vs context (refusals score as grounded)</td></tr>
             <tr><td>Output PII anonymize</td><td><span class="maybe">Conditional</span> — if Presidio ready</td></tr>
             <tr><td>Llama Guard</td><td><span class="no">No</span> — only if you pass a provider (not constructed today)</td></tr>
@@ -936,9 +1406,9 @@ flowchart TB
       </div>
     </section>
 
-    <!-- ============ 10 ============ -->
+    <!-- ============ 13 ============ -->
     <section id="s10" class="reveal">
-      <div class="sec-head"><span class="sec-num">10</span><h2>Memory</h2></div>
+      <div class="sec-head"><span class="sec-num">13</span><h2>Memory</h2></div>
       <div class="rule"></div>
 
       <div class="tablewrap">
@@ -954,9 +1424,9 @@ flowchart TB
       </div>
     </section>
 
-    <!-- ============ 11 ============ -->
+    <!-- ============ 14 ============ -->
     <section id="s11" class="reveal">
-      <div class="sec-head"><span class="sec-num">11</span><h2>How to run</h2></div>
+      <div class="sec-head"><span class="sec-num">14</span><h2>How to run</h2></div>
       <div class="rule"></div>
 
       <h3>Prerequisites</h3>
@@ -1033,9 +1503,9 @@ python track_production.py                     <span class="tok-c"># refresh PRO
       <p>Command: <code>python -m app.mcp.server</code>. Env: <code>API_BASE_URL</code>, <code>MCP_JWT</code> (same JWT as <code>/auth/login</code>).</p>
     </section>
 
-    <!-- ============ 12 ============ -->
+    <!-- ============ 15 ============ -->
     <section id="s12" class="reveal">
-      <div class="sec-head"><span class="sec-num">12</span><h2>How to <em>see</em> logs, graphs, traces</h2></div>
+      <div class="sec-head"><span class="sec-num">15</span><h2>How to <em>see</em> logs, graphs, traces</h2></div>
       <div class="rule"></div>
 
       <h3>JSON application logs</h3>
@@ -1079,9 +1549,9 @@ python track_production.py                     <span class="tok-c"># refresh PRO
       <p>Login → sidebar sessions + ingest → chat. Tokens appear as they stream. Session id comes from the <code>done</code> event.</p>
     </section>
 
-    <!-- ============ 13 ============ -->
+    <!-- ============ 16 ============ -->
     <section id="s13" class="reveal">
-      <div class="sec-head"><span class="sec-num">13</span><h2>Environment <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(<code>.env</code>)</span></h2></div>
+      <div class="sec-head"><span class="sec-num">16</span><h2>Environment <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(<code>.env</code>)</span></h2></div>
       <div class="rule"></div>
 
       <div class="callout stop">
@@ -1096,6 +1566,7 @@ python track_production.py                     <span class="tok-c"># refresh PRO
             <tr><td><code>JWT_SECRET_KEY</code></td><td>Required, ≥32 characters</td></tr>
             <tr><td><code>ANTHROPIC_API_KEY</code> / <code>ANTHROPIC_MODEL</code></td><td>Claude</td></tr>
             <tr><td><code>DATABASE_URL</code></td><td>Postgres (<code>postgresql://…</code>); SQLAlchemy uses <code>postgresql+psycopg://</code></td></tr>
+            <tr><td><code>ORDER_DATABASE_URL</code></td><td>Isolated SQLite order demo database; defaults to <code>data/orders_demo.db</code> resolved against the project root</td></tr>
             <tr><td><code>REDIS_URL</code></td><td>Cache + Celery</td></tr>
             <tr><td><code>CHROMA_HOST</code> / <code>CHROMA_PORT</code> / <code>CHROMA_PERSIST_DIRECTORY</code></td><td>Vectors</td></tr>
             <tr><td><code>IS_ASYNC</code></td><td>Celery ingest</td></tr>
@@ -1118,9 +1589,9 @@ python track_production.py                     <span class="tok-c"># refresh PRO
       <p>Settings still lists unused MySQL fields; runtime identity is Postgres <code>users</code>.</p>
     </section>
 
-    <!-- ============ 14 ============ -->
+    <!-- ============ 17 ============ -->
     <section id="s14" class="reveal">
-      <div class="sec-head"><span class="sec-num">14</span><h2>Non-negotiables</h2></div>
+      <div class="sec-head"><span class="sec-num">17</span><h2>Non-negotiables</h2></div>
       <div class="rule"></div>
 
       <div class="card">
@@ -1129,6 +1600,10 @@ python track_production.py                     <span class="tok-c"># refresh PRO
           <li>One supervisor + hybrid RAG specialist. No basic-RAG toggle.</li>
           <li>Sessions = <code>session_&lt;uuid&gt;</code>.</li>
           <li>Retrieval tenant filter happens <strong>before</strong> search, not after.</li>
+          <li>Each specialist may only call the tools on its own allowlist; <code>user_id</code> is injected from the JWT, never chosen by the model.</li>
+          <li>Order writes execute only after the exact <code>confirm order &lt;action_id&gt;</code> phrase from the same user and session, against an unchanged payload.</li>
+          <li>No model-written SQL runs against application tables.</li>
+          <li>Tokens are buffered until output guardrails pass.</li>
           <li>Product UI in Docker is port <strong>8002</strong>; local <code>run.py</code> UI is <strong>8501</strong>.</li>
         </ul>
       </div>
@@ -1193,10 +1668,14 @@ python track_production.py                     <span class="tok-c"># refresh PRO
       el.textContent = sources[i];
     });
     mermaid.initialize(mermaidTheme());
+    const stowed = [...document.querySelectorAll(".tab-panel[hidden]")];
+    stowed.forEach(panel => { panel.hidden = false; panel.classList.add("prerender"); });
     try {
       await mermaid.run({ nodes });
     } catch (err) {
       console.error("mermaid render failed", err);
+    } finally {
+      stowed.forEach(panel => { panel.classList.remove("prerender"); panel.hidden = true; });
     }
   }
 
@@ -1272,6 +1751,232 @@ python track_production.py                     <span class="tok-c"># refresh PRO
     const q = navq.value.trim().toLowerCase();
     links.forEach(a => a.classList.toggle("hidden", q !== "" && !a.textContent.toLowerCase().includes(q)));
   });
+
+  // tabs
+  document.querySelectorAll("[data-tabs]").forEach(group => {
+    const buttons = [...group.querySelectorAll(".tab-btn")];
+    const panelOf = btn => document.getElementById(btn.getAttribute("aria-controls"));
+    const activate = btn => {
+      buttons.forEach(b => {
+        const panel = panelOf(b);
+        const on = b === btn;
+        b.setAttribute("aria-selected", String(on));
+        if (panel) panel.hidden = !on;
+      });
+      const panel = panelOf(btn);
+      const pending = panel && [...panel.querySelectorAll("pre.mermaid")].some(el => !el.querySelector("svg"));
+      if (pending && window.__renderDiagrams) window.__renderDiagrams();
+    };
+    buttons.forEach(btn => {
+      btn.addEventListener("click", () => activate(btn));
+      btn.addEventListener("keydown", e => {
+        const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        const next = buttons[(buttons.indexOf(btn) + step + buttons.length) % buttons.length];
+        next.focus();
+        activate(next);
+      });
+    });
+  });
+</script>
+
+<script>
+  // ---------- architecture explorer tree ----------
+  const TREE_DATA = [
+    {
+      label: "Clients", meta: "entry points", badges: [["node", "layer"]],
+      detail: "Everything reaches the same pipeline. There is no second chat path and no mode switch.",
+      rows: [["Streamlit", "frontend/ — login, ingest, SSE chat"], ["MCP", "app/mcp/server.py — ask_rag over stdio"], ["HTTP", "curl / OpenAPI with a JWT"]],
+      children: [
+        { label: "Streamlit UI", meta: "frontend/", detail: "Sends the question plus the stored session id and renders token events as they arrive." },
+        { label: "MCP ask_rag", meta: "app/mcp/server.py", detail: "Reuses POST /chat/ with MCP_JWT, so guardrails, tenancy, and audit behave identically." }
+      ]
+    },
+    {
+      label: "FastAPI POST /chat/", meta: "app/api/query.py", badges: [["node", "edge"]],
+      detail: "Owns authentication, the cache decision, the graph call, and the SSE contract. Tokens are buffered until output rails pass.",
+      rows: [["Events", "token then done; a safety block still sends token + done"], ["Budget", "60 second wall clock around the graph call"], ["Session", "session_<uuid>, ownership checked before anything runs"]],
+      children: [
+        { label: "ensure_session_owner", meta: "app/api/session_access.py", badges: [["tenant", "tenant"]], detail: "Rejects a session id that belongs to another user with 404, so checkpoints cannot be read across tenants." },
+        { label: "Cache policy", meta: "services/cache/response_cache.py", detail: "Order wording, confirmation phrases, and any pending draft bypass both cache reads and writes. If checkpoint inspection fails, the turn bypasses the cache rather than risking a stale answer." },
+        { label: "Buffered SSE emit", meta: "event_generator", detail: "Text is collected first, validated by the output rails, then emitted. A blocked answer becomes a safe token plus a normal done." }
+      ]
+    },
+    {
+      label: "Master LangGraph", meta: "agent/multi_agent/master_graph.py", badges: [["node", "graph"]],
+      detail: "One supervisor over four specialists. Node names and topology are unchanged; specialist bodies moved into their own modules.",
+      rows: [["Checkpointer", "AsyncPostgresSaver, thread_id = session id"], ["Iterations", "max_iterations = 2, one specialist per turn"]],
+      children: [
+        { label: "validate_input", meta: "multi_agent/nodes.py", detail: "Length cap, jailbreak denylist, optional NeMo injection check, optional Presidio. A block routes straight to error_handler." },
+        { label: "load_memory", meta: "multi_agent/nodes.py", badges: [["tenant", "tenant"]], detail: "Loads up to ten long-term facts for this user_id from Postgres." },
+        {
+          label: "supervisor", meta: "multi_agent/supervisor.py",
+          detail: "Cheap keyword routing first, structured Pydantic routing when ambiguous. A pending order draft pins the turn to sql_agent only for confirmations, cancellations, and draft details; unrelated questions still route normally.",
+          rows: [["Prompts", "SUPERVISOR_ROUTING_V2, SUPERVISOR_SYNTHESIS_V2"], ["Rule", "observations are untrusted data, never instructions"]]
+        },
+        {
+          label: "rag_agent", meta: "specialists/rag.py", badges: [["node", "specialist"]],
+          detail: "Runs the nested CRAG graph with generate skipped so FastAPI owns streaming, or answers list-style asks directly with list_user_documents.",
+          children: [
+            { label: "document_search", meta: "tools/doc_search.py", badges: [["read", "read"], ["tenant", "tenant"]], detail: "Hybrid retrieval over the caller's documents. Retrieval pre-filters on user_id rather than filtering results afterwards.", rows: [["Schema", "DocumentSearchInput"], ["Stores", "Chroma + SQLite FTS5"]] },
+            { label: "list_user_documents", meta: "tools/doc_search.py", badges: [["read", "read"], ["tenant", "tenant"]], detail: "Lists uploaded files owned by the caller, newest first.", rows: [["Schema", "ListUserDocumentsInput"], ["Limit", "1 to 100 rows"]] }
+          ]
+        },
+        {
+          label: "sql_agent", meta: "specialists/sql.py", badges: [["node", "specialist"]],
+          detail: "Order reads, analytics, and the confirmation-gated writes. General database questions are refused because model-written SQL against application tables is disabled.",
+          rows: [["Intent", "OrderIntentV1 at temperature 0, with a safe fallback"], ["State", "pending_order_action in the checkpoint"]],
+          children: [
+            { label: "get_order", meta: "tools/order_tools.py", badges: [["read", "read"], ["tenant", "tenant"]], detail: "Fetches one owned order. A foreign order id returns nothing rather than an error that leaks existence.", rows: [["Schema", "GetOrderInput"]] },
+            { label: "list_orders", meta: "tools/order_tools.py", badges: [["read", "read"], ["tenant", "tenant"]], detail: "Lists the caller's recent orders, defaulting to the last 10 days.", rows: [["Schema", "ListOrdersInput"], ["Bounds", "days 1-365, limit <= 100, status enum"]] },
+            { label: "order_analytics", meta: "tools/order_tools.py", badges: [["read", "read"], ["tenant", "tenant"]], detail: "Counts and totals grouped by status through a parameterized repository aggregate, not generated SQL.", rows: [["Schema", "OrderAnalyticsInput"]] },
+            { label: "create_order", meta: "tools/order_tools.py", badges: [["approve", "approval"], ["tenant", "tenant"]], detail: "Executes only after the exact confirmation phrase. The idempotency key carries the payload digest, so a duplicate confirmation returns the same order and a changed payload is rejected.", rows: [["Schema", "CreateOrderInput"], ["Gate", "requires_approval, approved=True on the verified branch only"]] },
+            { label: "update_order", meta: "tools/order_tools.py", badges: [["approve", "approval"], ["tenant", "tenant"]], detail: "Compare-and-swap on expected_version. A concurrent change means no write and a stale-version answer.", rows: [["Schema", "UpdateOrderInput"], ["Gate", "requires_approval"]] },
+            { label: "pending_order_action", meta: "multi_agent/state.py", badges: [["node", "state"]], detail: "The draft itself: action id, owner, session, tool, payload, payload hash, missing fields, phase, 15 minute expiry, and idempotency key.", rows: [["Confirm", "confirm order act_xxxxxxxx"], ["Cancel", "cancel order act_xxxxxxxx"], ["Never", "a plain yes does not write"]] }
+          ]
+        },
+        {
+          label: "web_agent", meta: "specialists/web.py", badges: [["node", "specialist"]],
+          detail: "Reads an explicit URL when the message contains one, otherwise searches, then summarizes the result as untrusted data.",
+          children: [
+            { label: "web_search", meta: "tools/web_search.py", badges: [["read", "read"]], detail: "Tavily when TAVILY_API_KEY is set, DuckDuckGo otherwise. Missing dependencies degrade to a clear tool error instead of a crash." },
+            { label: "read_web_page", meta: "tools/web_read.py", badges: [["read", "read"]], detail: "Resolves the hostname once, rejects non-global addresses, URL credentials, and metadata hosts, then connects to that validated IP with TLS hostname verification.", rows: [["Caps", "3 redirects, 1 MB body, text content types"], ["Schema", "WebPageReadInput"]] }
+          ]
+        },
+        {
+          label: "general_agent", meta: "specialists/general.py", badges: [["node", "specialist"]],
+          detail: "Uses a deterministic tool when the request matches, then answers with Claude using tool output as data.",
+          children: [
+            { label: "calculate", meta: "tools/utility_tools.py", badges: [["read", "pure"]], detail: "Evaluates arithmetic through an AST whitelist. Names, calls, and imports are rejected, so this is not code execution.", rows: [["Schema", "CalculatorInput"]] },
+            { label: "current_datetime", meta: "tools/utility_tools.py", badges: [["read", "pure"]], detail: "Returns the current time for a validated IANA zone; an unknown zone is a clean error.", rows: [["Schema", "CurrentDateTimeInput"]] }
+          ]
+        },
+        { label: "validate_output", meta: "multi_agent/nodes.py", detail: "Grounding by token overlap against specialist context, plus optional Presidio anonymization." },
+        { label: "save_memory", meta: "multi_agent/nodes.py", detail: "Background extraction of durable facts. Operational order turns are skipped so drafts and confirmations never become long-term memories." },
+        { label: "error_handler", meta: "multi_agent/nodes.py", detail: "Produces a safe refusal that still leaves through the normal SSE path." }
+      ]
+    },
+    {
+      label: "Tool execution", meta: "app/tools/execute.py", badges: [["node", "gate"]],
+      detail: "The single door every tool call passes through.",
+      rows: [["Tenancy", "user_id is overwritten with the authenticated subject"], ["Approval", "requires_approval tools refuse unless approved=True"], ["Audit", "tool.call, tool.done, tool.error, tool.denied"]],
+      children: [
+        { label: "Registry allowlist", meta: "app/tools/registry.py", detail: "AGENT_TOOL_NAMES maps each agent to its tools. get_tool_for_agent returns nothing for an unassigned tool and logs the attempt." },
+        { label: "Versioned prompts", meta: "app/prompts/specialist_prompts.py", detail: "System prompts live in files, not inline strings, and every one states that retrieved and tool content is data rather than instructions." }
+      ]
+    },
+    {
+      label: "Stores", meta: "state and indexes", badges: [["store", "data"]],
+      detail: "Order data is deliberately separate from application state.",
+      children: [
+        { label: "Postgres", meta: "DATABASE_URL", badges: [["store", "state"]], detail: "Users, documents, user_memories, and LangGraph checkpoints." },
+        { label: "Chroma", meta: "CHROMA_*", badges: [["store", "vectors"]], detail: "Dense vectors with a tenant filter applied during search." },
+        { label: "SQLite FTS5", meta: "data/bm25.db", badges: [["store", "lexical"]], detail: "BM25 keyword index, separate from the application database." },
+        { label: "Redis", meta: "REDIS_URL", badges: [["store", "cache"]], detail: "Answer cache and Celery broker. Unavailable Redis degrades to no caching." },
+        { label: "orders_demo.db", meta: "ORDER_DATABASE_URL", badges: [["store", "orders"]], detail: "Isolated SQLite order database with WAL, busy timeout, foreign keys, and NullPool. Seeded on demand and never mixed with Postgres.", rows: [["Tables", "orders, order_items"], ["Indexes", "(user_id, created_at), (user_id, status)"], ["Unique", "(user_id, idempotency_key)"]] }
+      ]
+    }
+  ];
+
+  (function buildExplorer() {
+    const treeRoot = document.getElementById("tree");
+    const detailBox = document.getElementById("nodeDetail");
+    if (!treeRoot || !detailBox) return;
+
+    const CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 6 6 6-6 6"/></svg>';
+    const items = [];
+    let current = null;
+
+    const esc = value => String(value).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const badgeHtml = list => (list || []).map(([tone, text]) => `<span class="badge ${tone}">${esc(text)}</span>`).join("");
+
+    function showDetail(node, el) {
+      if (current) current.classList.remove("sel");
+      current = el;
+      el.classList.add("sel");
+      const rows = (node.rows || []).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+      detailBox.innerHTML =
+        `<h4>${esc(node.label)}</h4>` +
+        (node.meta ? `<span class="path">${esc(node.meta)}</span>` : "") +
+        (node.badges ? `<div class="badges">${badgeHtml(node.badges)}</div>` : "") +
+        (node.detail ? `<p>${esc(node.detail)}</p>` : "") +
+        (rows ? `<dl>${rows}</dl>` : "");
+    }
+
+    function rowHtml(node) {
+      return CHEV +
+        `<span class="label">${esc(node.label)}</span>` +
+        (node.meta ? `<span class="meta">${esc(node.meta)}</span>` : "") +
+        badgeHtml(node.badges);
+    }
+
+    function build(nodes, container, depth) {
+      return nodes.map(node => {
+        const kids = node.children || [];
+        const searchText = [node.label, node.meta, node.detail, JSON.stringify(node.rows || "")].join(" ").toLowerCase();
+        let el, head;
+
+        if (kids.length) {
+          el = document.createElement("details");
+          el.open = depth === 0;
+          head = document.createElement("summary");
+          head.innerHTML = rowHtml(node);
+          el.appendChild(head);
+          const kidBox = document.createElement("div");
+          kidBox.className = "kids";
+          el.appendChild(kidBox);
+          container.appendChild(el);
+          const children = build(kids, kidBox, depth + 1);
+          head.addEventListener("click", () => showDetail(node, head));
+          return { el, head, children, text: searchText };
+        }
+
+        el = document.createElement("div");
+        el.className = "leaf";
+        el.innerHTML = rowHtml(node);
+        container.appendChild(el);
+        el.addEventListener("click", () => showDetail(node, el));
+        return { el, head: el, children: [], text: searchText };
+      });
+    }
+
+    items.push(...build(TREE_DATA, treeRoot, 0));
+
+    function walk(list, fn) {
+      list.forEach(item => { fn(item); walk(item.children, fn); });
+    }
+
+    function filter(list, q) {
+      let visible = false;
+      list.forEach(item => {
+        const selfMatch = !q || item.text.includes(q);
+        const childMatch = filter(item.children, q);
+        const show = selfMatch || childMatch;
+        item.el.classList.toggle("hide", !show);
+        if (q && show && item.el.tagName === "DETAILS") item.el.open = true;
+        visible = visible || show;
+      });
+      return visible;
+    }
+
+    const empty = document.createElement("p");
+    empty.className = "tree-empty";
+    empty.textContent = "No node matches that filter.";
+    empty.hidden = true;
+    treeRoot.appendChild(empty);
+
+    document.getElementById("treeq").addEventListener("input", e => {
+      const q = e.target.value.trim().toLowerCase();
+      const any = filter(items, q);
+      empty.hidden = any;
+      if (!q) walk(items, item => { if (item.el.tagName === "DETAILS") item.el.open = items.includes(item); });
+    });
+    document.getElementById("treeExpand").addEventListener("click", () => walk(items, i => { if (i.el.tagName === "DETAILS") i.el.open = true; }));
+    document.getElementById("treeCollapse").addEventListener("click", () => walk(items, i => { if (i.el.tagName === "DETAILS") i.el.open = false; }));
+
+    showDetail(TREE_DATA[2], items[2].head);
+  })();
 </script>
 </body>
 </html>
