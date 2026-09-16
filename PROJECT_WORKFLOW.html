@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>basic_rag — how the product works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #070b14;
+    --bg-soft: #0c1220;
+    --panel: rgba(18, 26, 43, 0.72);
+    --panel-solid: #111a2b;
+    --border: rgba(148, 173, 214, 0.16);
+    --border-strong: rgba(148, 173, 214, 0.30);
+    --text: #e6edf9;
+    --text-dim: #9fb0cc;
+    --text-faint: #6f819e;
+    --accent: #5eead4;
+    --accent-2: #8b7bff;
+    --accent-3: #f0abfc;
+    --warn: #fbbf24;
+    --ok: #4ade80;
+    --danger: #fb7185;
+    --code-bg: #0a1020;
+    --shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+    --radius: 16px;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  html[data-theme="light"] {
+    --bg: #f6f8fc;
+    --bg-soft: #ffffff;
+    --panel: rgba(255, 255, 255, 0.82);
+    --panel-solid: #ffffff;
+    --border: rgba(31, 51, 85, 0.12);
+    --border-strong: rgba(31, 51, 85, 0.24);
+    --text: #10182a;
+    --text-dim: #4a5a76;
+    --text-faint: #75859f;
+    --accent: #0d9488;
+    --accent-2: #6d4aff;
+    --accent-3: #b93fc0;
+    --code-bg: #f1f4fa;
+    --shadow: 0 20px 50px -34px rgba(20, 35, 70, 0.55);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ---------- ambient background ---------- */
+  .aurora {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 12% -10%, rgba(94, 234, 212, 0.16), transparent 60%),
+      radial-gradient(55rem 38rem at 88% 4%, rgba(139, 123, 255, 0.18), transparent 62%),
+      radial-gradient(48rem 34rem at 50% 108%, rgba(240, 171, 252, 0.12), transparent 60%);
+  }
+  .grid-lines {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: .35;
+    background-image:
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 72%);
+  }
+
+  /* ---------- progress ---------- */
+  #progress {
+    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+    z-index: 100;
+    transition: width .1s linear;
+  }
+
+  /* ---------- layout ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: 296px minmax(0, 1fr);
+    gap: 40px;
+    max-width: 1560px;
+    margin: 0 auto;
+    padding: 0 40px 120px;
+  }
+
+  /* ---------- sidebar ---------- */
+  aside {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 28px 0 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+    text-decoration: none; color: inherit;
+  }
+  .brand .mark {
+    width: 40px; height: 40px; border-radius: 12px; flex: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 700; font-size: 15px; color: #05121f;
+    box-shadow: 0 10px 26px -12px var(--accent-2);
+  }
+  .brand b { display: block; font-size: 15px; letter-spacing: -0.01em; }
+  .brand span { display: block; font-size: 11.5px; color: var(--text-faint); letter-spacing: .06em; text-transform: uppercase; }
+
+  .nav-search {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 11px; padding: 8px 11px;
+  }
+  .nav-search input {
+    width: 100%; border: 0; outline: 0; background: transparent;
+    color: var(--text); font-family: var(--sans); font-size: 13px;
+  }
+  .nav-search input::placeholder { color: var(--text-faint); }
+  .nav-search svg { flex: none; opacity: .55; }
+
+  nav {
+    overflow-y: auto;
+    padding-right: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  nav::-webkit-scrollbar { width: 6px; }
+  nav::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+
+  nav a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 12px; margin-bottom: 2px;
+    border-radius: 9px;
+    color: var(--text-dim); text-decoration: none;
+    font-size: 13.4px; font-weight: 500;
+    border-left: 2px solid transparent;
+    transition: background .18s, color .18s, border-color .18s, transform .18s;
+  }
+  nav a .num {
+    font-family: var(--mono); font-size: 11px; color: var(--text-faint);
+    min-width: 18px; text-align: right;
+  }
+  nav a:hover { background: var(--panel); color: var(--text); transform: translateX(2px); }
+  nav a.active {
+    background: linear-gradient(90deg, rgba(94,234,212,.14), transparent);
+    color: var(--text); border-left-color: var(--accent);
+  }
+  nav a.active .num { color: var(--accent); }
+  nav a.hidden { display: none; }
+
+  .side-foot { margin-top: auto; display: flex; gap: 8px; }
+  .chip-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+    background: var(--panel); border: 1px solid var(--border);
+    color: var(--text-dim); border-radius: 10px; padding: 9px 10px;
+    font: 500 12.5px var(--sans); cursor: pointer;
+    transition: border-color .18s, color .18s, background .18s;
+  }
+  .chip-btn:hover { border-color: var(--border-strong); color: var(--text); }
+
+  /* ---------- hero ---------- */
+  header.hero {
+    position: relative;
+    margin: 34px 0 44px;
+    padding: 46px 48px 42px;
+    border: 1px solid var(--border);
+    border-radius: 26px;
+    background:
+      linear-gradient(135deg, rgba(94,234,212,.10), rgba(139,123,255,.10) 48%, rgba(240,171,252,.08)),
+      var(--panel);
+    backdrop-filter: blur(14px);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  header.hero::after {
+    content: ""; position: absolute; inset: -40% -10% auto auto;
+    width: 420px; height: 420px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(139,123,255,.25), transparent 65%);
+    pointer-events: none;
+  }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 9px;
+    font: 600 11.5px var(--mono); letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(94,234,212,.10);
+    border: 1px solid rgba(94,234,212,.28);
+    padding: 5px 12px; border-radius: 99px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(74,222,128,.7); animation: pulse 2.2s infinite; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(74,222,128,.55); }
+    70% { box-shadow: 0 0 0 9px rgba(74,222,128,0); }
+    100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
+  }
+  h1 {
+    font-size: clamp(2.1rem, 4.4vw, 3.4rem);
+    line-height: 1.06; letter-spacing: -0.035em; font-weight: 800;
+    margin: 20px 0 14px; max-width: 20ch;
+    background: linear-gradient(120deg, var(--text) 30%, var(--accent) 70%, var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { font-size: 16.5px; color: var(--text-dim); max-width: 72ch; margin: 0; }
+  .lede strong { color: var(--text); font-weight: 600; }
+
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px; margin-top: 32px; position: relative; z-index: 1;
+  }
+  .fact {
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; background: var(--bg-soft);
+  }
+  .fact .k { font: 600 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); }
+  .fact .v { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; margin-top: 5px; }
+  .fact .v small { font-size: 12.5px; font-weight: 500; color: var(--text-dim); }
+
+  /* ---------- sections ---------- */
+  section { scroll-margin-top: 90px; margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: center; gap: 14px; margin: 0 0 6px; }
+  .sec-num {
+    font: 700 12.5px var(--mono); color: var(--accent);
+    border: 1px solid var(--border-strong); border-radius: 9px;
+    padding: 4px 10px; background: var(--panel);
+  }
+  h2 { font-size: clamp(1.4rem, 2.3vw, 1.9rem); font-weight: 700; letter-spacing: -0.028em; margin: 0; }
+  h3 {
+    font-size: 1.06rem; font-weight: 650; letter-spacing: -0.012em;
+    margin: 34px 0 12px; color: var(--text);
+    display: flex; align-items: center; gap: 10px;
+  }
+  h3::before { content: ""; width: 4px; height: 17px; border-radius: 3px; background: linear-gradient(var(--accent), var(--accent-2)); }
+  .rule { height: 1px; background: linear-gradient(90deg, var(--border-strong), transparent); margin: 12px 0 26px; }
+
+  p { margin: 0 0 16px; color: var(--text-dim); }
+  p strong, li strong { color: var(--text); font-weight: 650; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  /* ---------- cards ---------- */
+  .card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--panel); backdrop-filter: blur(10px);
+    padding: 22px 24px; box-shadow: var(--shadow);
+  }
+  .card + .card { margin-top: 18px; }
+
+  /* ---------- code ---------- */
+  code {
+    font-family: var(--mono); font-size: .855em;
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 1.5px 6px; border-radius: 6px; color: var(--accent);
+    white-space: nowrap;
+  }
+  .codeblock { position: relative; margin: 0 0 20px; }
+  .codeblock .bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--panel-solid);
+    border: 1px solid var(--border); border-bottom: 0;
+    border-radius: 12px 12px 0 0; padding: 8px 14px;
+  }
+  .codeblock .bar span { font: 600 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+  .copy {
+    background: transparent; border: 1px solid var(--border); color: var(--text-faint);
+    border-radius: 7px; padding: 3px 9px; font: 500 11px var(--sans); cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .copy:hover { color: var(--accent); border-color: var(--accent); }
+  pre {
+    margin: 0; padding: 16px 18px; overflow-x: auto;
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 0 0 12px 12px;
+    font-family: var(--mono); font-size: 13px; line-height: 1.72; color: var(--text);
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; white-space: pre; font-size: inherit; }
+  .tok-c { color: var(--text-faint); font-style: italic; }
+  .tok-d { color: var(--accent); }
+
+  /* ---------- tables ---------- */
+  .tablewrap {
+    border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden auto; margin-bottom: 20px; background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead th {
+    text-align: left; padding: 12px 16px;
+    font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-faint);
+    background: linear-gradient(180deg, rgba(139,123,255,.09), transparent);
+    border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text-dim); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { transition: background .15s; }
+  tbody tr:hover { background: rgba(139,123,255,.06); }
+  tbody td:first-child { color: var(--text); font-weight: 550; white-space: nowrap; }
+  table.wide tbody td:first-child { white-space: normal; }
+
+  .m {
+    font: 600 10.5px var(--mono); letter-spacing: .06em;
+    padding: 2px 8px; border-radius: 6px; display: inline-block;
+  }
+  .m.get { color: #67e8f9; background: rgba(103,232,249,.12); border: 1px solid rgba(103,232,249,.3); }
+  .m.post { color: var(--ok); background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.3); }
+  .m.del { color: var(--danger); background: rgba(251,113,133,.12); border: 1px solid rgba(251,113,133,.3); }
+  html[data-theme="light"] .m.get { color: #0e7490; }
+
+  .yes { color: var(--ok); font-weight: 600; }
+  .maybe { color: var(--warn); font-weight: 600; }
+  .no { color: var(--danger); font-weight: 600; }
+
+  /* ---------- lists ---------- */
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+  ol.steps li {
+    counter-increment: s; position: relative;
+    padding: 12px 0 12px 52px; border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  ol.steps li:last-child { border-bottom: 0; padding-bottom: 0; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 11px;
+    width: 30px; height: 30px; border-radius: 9px;
+    display: grid; place-items: center;
+    font: 600 12px var(--mono); color: var(--accent);
+    background: var(--code-bg); border: 1px solid var(--border-strong);
+  }
+  ul.plain { list-style: none; padding: 0; margin: 0 0 16px; }
+  ul.plain li {
+    position: relative; padding-left: 22px; margin-bottom: 9px; color: var(--text-dim);
+  }
+  ul.plain li::before {
+    content: ""; position: absolute; left: 4px; top: 11px;
+    width: 6px; height: 6px; border-radius: 2px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  }
+
+  /* ---------- callouts ---------- */
+  .callout {
+    display: flex; gap: 14px; padding: 16px 18px; border-radius: 13px;
+    border: 1px solid var(--border); background: var(--panel);
+    border-left: 3px solid var(--accent); margin-bottom: 20px;
+  }
+  .callout .ico { font-size: 17px; line-height: 1.3; }
+  .callout p { margin: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.stop { border-left-color: var(--danger); }
+
+  /* ---------- diagrams ---------- */
+  .diagram {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background:
+      radial-gradient(40rem 20rem at 50% 0%, rgba(139,123,255,.08), transparent 70%),
+      var(--panel-solid);
+    padding: 12px 18px 22px; margin-bottom: 22px; box-shadow: var(--shadow);
+  }
+  .diagram .cap {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 2px 12px; border-bottom: 1px dashed var(--border); margin-bottom: 16px;
+  }
+  .diagram .cap b { font: 600 11px var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--text-faint); }
+  .diagram .cap i { font-style: normal; font-size: 11.5px; color: var(--text-faint); }
+  .mermaid { text-align: center; overflow-x: auto; }
+  .mermaid svg { max-width: 100%; height: auto; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;
+    color: var(--text-faint); font-size: 12.5px;
+  }
+
+  #top-btn {
+    position: fixed; right: 26px; bottom: 26px; z-index: 50;
+    width: 42px; height: 42px; border-radius: 12px; cursor: pointer;
+    border: 1px solid var(--border-strong); background: var(--panel-solid); color: var(--text-dim);
+    display: grid; place-items: center; opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s, color .2s;
+    box-shadow: var(--shadow);
+  }
+  #top-btn.show { opacity: 1; pointer-events: auto; }
+  #top-btn:hover { color: var(--accent); transform: translateY(-3px); }
+
+  /* ---------- reveal ---------- */
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .55s ease, transform .55s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 1080px) {
+    .shell { grid-template-columns: 1fr; padding: 0 22px 90px; }
+    aside { position: static; height: auto; padding-top: 22px; }
+    nav { max-height: 300px; }
+    header.hero { padding: 34px 26px; margin-top: 22px; }
+  }
+
+  @media print {
+    .aurora, .grid-lines, aside, #top-btn, #progress, .copy { display: none !important; }
+    .shell { display: block; max-width: none; padding: 0; }
+    body { background: #fff; color: #000; }
+    .card, .diagram, .tablewrap, header.hero { box-shadow: none; break-inside: avoid; }
+    section { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+<div class="aurora"></div>
+<div class="grid-lines"></div>
+<div id="progress"></div>
+
+<div class="shell">
+  <aside>
+    <a class="brand" href="#top">
+      <div class="mark">RAG</div>
+      <div>
+        <b>basic_rag</b>
+        <span>Operator map</span>
+      </div>
+    </a>
+
+    <div class="nav-search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+      <input id="navq" type="search" placeholder="Filter sections…" autocomplete="off" />
+    </div>
+
+    <nav id="toc">
+      <a href="#s1"><span class="num">01</span>What you are looking at</a>
+      <a href="#s2"><span class="num">02</span>Layout</a>
+      <a href="#s3"><span class="num">03</span>How a chat turn runs</a>
+      <a href="#s4"><span class="num">04</span>Master graph</a>
+      <a href="#s5"><span class="num">05</span>Nested RAG graph</a>
+      <a href="#s6"><span class="num">06</span>Ingest graph</a>
+      <a href="#s7"><span class="num">07</span>Compose topology</a>
+      <a href="#s8"><span class="num">08</span>All HTTP endpoints</a>
+      <a href="#s9"><span class="num">09</span>Guardrails</a>
+      <a href="#s10"><span class="num">10</span>Memory</a>
+      <a href="#s11"><span class="num">11</span>How to run</a>
+      <a href="#s12"><span class="num">12</span>Logs, graphs, traces</a>
+      <a href="#s13"><span class="num">13</span>Environment</a>
+      <a href="#s14"><span class="num">14</span>Non-negotiables</a>
+    </nav>
+
+    <div class="side-foot">
+      <button class="chip-btn" id="themeBtn" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span id="themeLabel">Light</span>
+      </button>
+      <button class="chip-btn" onclick="window.print()" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4v-6h16v6h-2M8 14h8v7H8z"/></svg>
+        Print
+      </button>
+    </div>
+  </aside>
+
+  <main id="top">
+    <header class="hero">
+      <div class="eyebrow"><i class="dot"></i> Current codebase · not a roadmap</div>
+      <h1>basic_rag — how the product works</h1>
+      <p class="lede">
+        This file is the operator’s map of the <strong>current</strong> codebase. Chat has <strong>one</strong> pipeline:
+        a LangGraph supervisor over hybrid retrieval. There is no <code>/query</code> mode switch and no second RAG path.
+        Session ids are always <code>session_&lt;uuid&gt;</code>.
+      </p>
+
+      <div class="facts">
+        <div class="fact"><div class="k">Chat</div><div class="v">SSE <small>token → done</small></div></div>
+        <div class="fact"><div class="k">Orchestration</div><div class="v">LangGraph <small>supervisor</small></div></div>
+        <div class="fact"><div class="k">Retrieval</div><div class="v">Hybrid <small>dense + BM25 + RRF</small></div></div>
+        <div class="fact"><div class="k">UI port</div><div class="v">8002 <small>/ 8501 local</small></div></div>
+        <div class="fact"><div class="k">Auth</div><div class="v">JWT <small>Bearer, ≥32 chars</small></div></div>
+      </div>
+    </header>
+
+    <!-- ============ 1 ============ -->
+    <section id="s1" class="reveal">
+      <div class="sec-head"><span class="sec-num">01</span><h2>What you are looking at</h2></div>
+      <div class="rule"></div>
+
+      <p>
+        A user talks to Streamlit. Streamlit calls FastAPI with a JWT. FastAPI runs a <strong>master LangGraph</strong>.
+        The supervisor picks a specialist (RAG, SQL, web, or general). The RAG specialist runs a <strong>nested CRAG graph</strong>:
+        dense Chroma + BM25 FTS5 → RRF → knowledge-graph boost → cross-encoder → grade → optional rewrite → context.
+        Claude then <strong>token-streams</strong> the answer over SSE. Guardrails, cache, rate limits, audit logs, and optional
+        traces wrap that turn.
+      </p>
+
+      <div class="diagram">
+        <div class="cap"><b>System overview</b><i>clients → API → graphs → stores</i></div>
+        <pre class="mermaid">
+flowchart LR
+    subgraph clients [Clients]
+        UI[Streamlit UI]
+        MCP[MCP stdio ask_rag]
+        HTTP[curl / OpenAPI]
+    end
+
+    subgraph api [FastAPI main.py]
+        Auth["/auth"]
+        Docs["/ingest /documents"]
+        Chat["POST /chat/ SSE"]
+        Ops["/health /metrics"]
+    end
+
+    subgraph graphs [LangGraph]
+        Master[Master supervisor]
+        Nested[Nested RAG CRAG]
+    end
+
+    subgraph stores [State and indexes]
+        PG[(Postgres users memories checkpoints)]
+        Chroma[(Chroma vectors)]
+        BM25[(SQLite FTS5 BM25)]
+        Redis[(Redis cache + Celery)]
+    end
+
+    UI --&gt; Chat
+    MCP --&gt; Chat
+    HTTP --&gt; Auth
+    HTTP --&gt; Docs
+    HTTP --&gt; Chat
+    Chat --&gt; Master
+    Master --&gt; Nested
+    Nested --&gt; Chroma
+    Nested --&gt; BM25
+    Master --&gt; PG
+    Chat --&gt; Redis
+    Ops --&gt; Prom[Prometheus]
+    Prom --&gt; Graf[Grafana]
+        </pre>
+      </div>
+
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Layer</th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td>Product UI</td><td>Streamlit (<code>frontend/</code>). Local <code>run.py</code> uses port <strong>8501</strong>. Docker Compose publishes <strong>8002</strong> only.</td></tr>
+            <tr><td>API</td><td>FastAPI <code>main.py</code>. Local <strong>8000</strong>. Docker: internal <code>api:8000</code>, not published.</td></tr>
+            <tr><td>Chat</td><td><code>POST /chat/</code> and <code>POST /chat</code> — SSE <code>token</code> then <code>done</code> (or <code>error</code>).</td></tr>
+            <tr><td>Orchestration</td><td><code>app/agent/multi_agent/</code> master graph + nested <code>app/services/rag/</code> graph.</td></tr>
+            <tr><td>LLM</td><td>Anthropic Claude (<code>ClaudeService</code>), timeout + retry. Streaming on the chat path.</td></tr>
+            <tr><td>Dense search</td><td>Chroma cosine/HNSW, tenant filter <code>{user_id}</code>.</td></tr>
+            <tr><td>Lexical search</td><td>SQLite FTS5 BM25 in <code>data/bm25.db</code> (not the app DB).</td></tr>
+            <tr><td>Fusion</td><td>RRF (<code>k=60</code>) then <code>KnowledgeGraph</code> token co-occurrence boost then cross-encoder.</td></tr>
+            <tr><td>App state</td><td>Postgres via <code>DATABASE_URL</code> (<code>database/sqlite.py</code> name is historical). Users, documents, <code>user_memories</code>, LangGraph checkpoints.</td></tr>
+            <tr><td>Auth</td><td>JWT Bearer, secret required (≥32 chars).</td></tr>
+            <tr><td>Ingest</td><td>Sync pipeline, or Celery when <code>IS_ASYNC=true</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section id="s2" class="reveal">
+      <div class="sec-head"><span class="sec-num">02</span><h2>Layout <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(paths that actually exist)</span></h2></div>
+      <div class="rule"></div>
+
+      <div class="codeblock">
+        <div class="bar"><span>tree</span><button class="copy" type="button">Copy</button></div>
+<pre><code>basic_rag/
+├── main.py                 <span class="tok-c">FastAPI: routers, lifespan, /health, /metrics</span>
+├── run.py                  <span class="tok-c">Local: uvicorn + Streamlit together</span>
+├── docker-compose.yml      <span class="tok-c">redis, chroma, postgres, api, celery, ui, prometheus, grafana</span>
+├── track_production.py     <span class="tok-c">Regenerates PRODUCTION_TRACKER.md</span>
+├── database/
+│   ├── sqlite.py           <span class="tok-c">Postgres engine + init_db (SQLAlchemy postgresql+psycopg)</span>
+│   └── models.py           <span class="tok-c">User, Document, MemoryRecord</span>
+├── frontend/               <span class="tok-c">Streamlit: login, ingest, chat SSE client</span>
+├── evals/                  <span class="tok-c">Golden set, Ragas, DeepEval stand-in, MLflow log</span>
+├── observability/          <span class="tok-c">Prometheus scrape + Grafana dashboard JSON</span>
+├── app/
+│   ├── api/                <span class="tok-c">HTTP: auth, documents, chat, session_access, dependencies</span>
+│   ├── agent/multi_agent/  <span class="tok-c">Master graph, supervisor, specialists</span>
+│   ├── services/rag/       <span class="tok-c">Nested CRAG graph</span>
+│   ├── services/retriever/ <span class="tok-c">dense, bm25, hybrid, knowledge_graph, reranker</span>
+│   ├── services/llm/       <span class="tok-c">Claude</span>
+│   ├── services/cache/     <span class="tok-c">Redis answer cache</span>
+│   ├── guardrails/         <span class="tok-c">Input/output rails, NeMo, Presidio, jailbreak</span>
+│   ├── memory/             <span class="tok-c">Long-term extract + persist</span>
+│   ├── tools/              <span class="tok-c">document_search, web_search, sql_*, invoke_tool</span>
+│   ├── mcp/server.py       <span class="tok-c">MCP stdio: health, ask_rag</span>
+│   ├── core/               <span class="tok-c">config, logger, audit, metrics, rate_limit, langfuse_tracer</span>
+│   └── tasks/              <span class="tok-c">Celery ingest</span></code></pre>
+      </div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section id="s3" class="reveal">
+      <div class="sec-head"><span class="sec-num">03</span><h2>How a chat turn runs <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(depth)</span></h2></div>
+      <div class="rule"></div>
+
+      <div class="diagram">
+        <div class="cap"><b>Request lifecycle</b><i>auth → cache → graph → stream → persist</i></div>
+        <pre class="mermaid">
+sequenceDiagram
+    participant U as Streamlit / MCP / client
+    participant API as FastAPI POST /chat/
+    participant RL as SlowAPI
+    participant Cache as Redis
+    participant G as Master LangGraph
+    participant RAG as Nested RAG graph
+    participant LLM as Claude generate_stream
+    participant Rails as Output guardrails
+    participant Mem as Postgres memories
+
+    U-&gt;&gt;API: JWT + question + optional session_id
+    API-&gt;&gt;RL: 10/minute chat, 60/minute default
+    API-&gt;&gt;API: ensure_session_owner / new session_uuid
+    API-&gt;&gt;Cache: rag:answer:{user_id}:{sha256}
+    alt cache hit
+        Cache--&gt;&gt;U: SSE token + done
+    else miss
+        API-&gt;&gt;G: ainvoke max_iterations=2
+        G-&gt;&gt;G: validate_input then load_memory
+        G-&gt;&gt;G: supervisor routes specialist
+        opt rag_agent
+            G-&gt;&gt;RAG: ainvoke skip_generate thread_id session:rag
+            RAG--&gt;&gt;G: context chunks
+        end
+        G-&gt;&gt;G: synthesize then validate_output then save_memory
+        G--&gt;&gt;API: trajectory + memories
+        API-&gt;&gt;LLM: stream tokens from context
+        LLM--&gt;&gt;U: SSE type=token (many)
+        API-&gt;&gt;Rails: grounding + PII
+        API-&gt;&gt;Cache: SETEX
+        API--&gt;&gt;U: SSE type=done
+        API-&gt;&gt;Mem: background persist_from_turn
+    end
+        </pre>
+      </div>
+
+      <div class="card">
+        <ol class="steps">
+          <li><strong>Auth.</strong> <code>Authorization: Bearer &lt;jwt&gt;</code>. Missing/invalid → 401. Rate limit exceeded → 429.</li>
+          <li><strong>Session.</strong> Empty question → 400. If <code>session_id</code> exists and belongs to another user → 404. Else reuse or mint <code>session_&lt;uuid&gt;</code>.</li>
+          <li><strong>Keepalive.</strong> First SSE line is <code>: keepalive</code> so the UI is not stuck while models load.</li>
+          <li><strong>Cache.</strong> Redis key <code>rag:answer:{user_id}:{sha256(normalized question)}</code>. Hit skips the graphs (fail-open if Redis is down).</li>
+          <li><strong>Master graph</strong> (<code>get_master_agent_graph</code>, compiled once). Checkpointer is <code>AsyncPostgresSaver</code> on <code>DATABASE_URL</code>. <code>thread_id</code> is the session id. Metadata includes <code>user_id</code> for ownership.</li>
+          <li><strong>Input rails.</strong> Length cap 10k. Jailbreak denylist always. NeMo injection when enabled and ready. Presidio on input when spaCy loads.</li>
+          <li><strong>Long-term memory load.</strong> Up to 10 <code>user_memories</code> rows for this <code>user_id</code>.</li>
+          <li><strong>Supervisor.</strong> Cheap keyword router first; LLM <code>agenerate_structured(SupervisorDecision)</code> if ambiguous. After one specialist this turn, next hop is <code>FINISH</code>. Cap <code>max_iterations=2</code>.</li>
+          <li><strong>RAG specialist.</strong> Nested graph with <code>skip_generate=True</code> and <code>skip_memory_persist=True</code>, <code>thread_id="{session}:rag"</code> so checkpoints do not collide. Retrieve is <strong>pre-filtered</strong> by <code>user_id</code>. Fallback tool: <code>document_search</code>.</li>
+          <li><strong>SQL / web / general.</strong> Read-only SQL (denied tables include <code>users</code>, <code>user_memories</code>, checkpoints). Web: Tavily if <code>TAVILY_API_KEY</code> else DuckDuckGo. General: Claude + memories. Tools go through <code>invoke_tool</code> (audit + <code>requires_approval</code> for future write tools).</li>
+          <li><strong>Synthesize</strong> then <strong>output rails</strong> on the supervisor answer; chat then <strong>re-generates</strong> with <code>generate_stream</code> so the UI sees tokens. Grounding = token overlap vs specialist context. Presidio may anonymize.</li>
+          <li><strong>SSE <code>done</code>.</strong> <code>session_id</code>, question, answer, iterations, <code>agent_trajectory</code>, <code>guardrail_metadata</code>.</li>
+          <li><strong>Save memory.</strong> Background thread extracts ADD/UPDATE/IGNORE (<code>semantic</code> / <code>episodic</code> allowed) into Postgres.</li>
+          <li><strong>Audit / metrics / traces.</strong> <code>audit_event</code> (no raw PII). <code>inc_chat(ok|cache|blocked|error)</code>. LangSmith if tracing env is set. Langfuse if keys are set.</li>
+        </ol>
+      </div>
+
+      <h3>SSE event shapes</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th><code>type</code></th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>token</code></td><td>Incremental Claude text (<code>content</code>)</td></tr>
+            <tr><td><code>done</code></td><td>Full payload; UI stores <code>session_id</code></td></tr>
+            <tr><td><code>error</code></td><td>User-visible failure or safety block</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section id="s4" class="reveal">
+      <div class="sec-head"><span class="sec-num">04</span><h2>Master graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(only chat pipeline)</span></h2></div>
+      <div class="rule"></div>
+
+      <p>Compiled in <code>build_master_agent_graph</code>. Specialists always return to the supervisor so it can <code>FINISH</code>.</p>
+
+      <div class="diagram">
+        <div class="cap"><b>Master supervisor graph</b><i>build_master_agent_graph</i></div>
+        <pre class="mermaid">
+flowchart TD
+    START([START]) --&gt; validate_input
+    validate_input --&gt;|blocked| error_handler
+    validate_input --&gt;|continue| load_memory
+    load_memory --&gt; supervisor
+
+    supervisor --&gt;|rag_agent| rag_agent
+    supervisor --&gt;|sql_agent| sql_agent
+    supervisor --&gt;|web_agent| web_agent
+    supervisor --&gt;|general_agent| general_agent
+    supervisor --&gt;|FINISH| synthesize
+
+    rag_agent --&gt; supervisor
+    sql_agent --&gt; supervisor
+    web_agent --&gt; supervisor
+    general_agent --&gt; supervisor
+
+    synthesize --&gt; validate_output
+    validate_output --&gt;|continue| save_memory
+    validate_output --&gt;|blocked| error_handler
+    save_memory --&gt; END([END])
+    error_handler --&gt; END
+        </pre>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Node</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><code>validate_input</code></td><td>Length, jailbreak, optional NeMo, optional Presidio</td></tr>
+            <tr><td><code>load_memory</code></td><td>Postgres long-term facts</td></tr>
+            <tr><td><code>supervisor</code></td><td>Route + <code>synthesize</code></td></tr>
+            <tr><td><code>rag_agent</code></td><td>Nested hybrid CRAG</td></tr>
+            <tr><td><code>sql_agent</code></td><td>Schema → SELECT → summary</td></tr>
+            <tr><td><code>web_agent</code></td><td>Live search then grounded summary</td></tr>
+            <tr><td><code>general_agent</code></td><td>Direct Claude</td></tr>
+            <tr><td><code>validate_output</code></td><td>Grounding + PII on supervisor text</td></tr>
+            <tr><td><code>save_memory</code></td><td>Async extract/persist</td></tr>
+            <tr><td><code>error_handler</code></td><td>Safe refusal</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout stop">
+        <div class="ico">⛔</div>
+        <p>There is <strong>no</strong> public <code>/query/hybrid</code>. The nested RAG graph is only <code>rag_agent</code>.</p>
+      </div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section id="s5" class="reveal">
+      <div class="sec-head"><span class="sec-num">05</span><h2>Nested RAG graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(<code>rag_agent</code>)</span></h2></div>
+      <div class="rule"></div>
+
+      <p><code>build_rag_graph</code> in <code>app/services/rag/graph.py</code>. Under the master, generate is skipped so FastAPI owns streaming.</p>
+
+      <div class="diagram">
+        <div class="cap"><b>CRAG loop</b><i>retrieve → rerank → grade → rewrite → context</i></div>
+        <pre class="mermaid">
+flowchart TD
+    START([START]) --&gt; validate_input
+    validate_input --&gt;|blocked| error_handler
+    validate_input --&gt;|continue| load_memory
+    load_memory --&gt; retrieve
+    retrieve --&gt;|retry| retrieve
+    retrieve --&gt;|fallback| build_context
+    retrieve --&gt;|continue| reranker
+    reranker --&gt; grade_documents
+    grade_documents --&gt;|rewrite if empty retrieve| rewrite
+    grade_documents --&gt;|build_context| build_context
+    rewrite --&gt; retrieve
+    build_context --&gt; generate
+    generate --&gt; validate_output
+    validate_output --&gt;|retry| generate
+    validate_output --&gt;|continue| save_memory
+    validate_output --&gt;|error| error_handler
+    save_memory --&gt; END([END])
+    error_handler --&gt; END
+        </pre>
+      </div>
+
+      <h3>Retrieve internals</h3>
+      <div class="diagram">
+        <div class="cap"><b>Hybrid retrieval</b><i>dense + lexical → RRF → KG boost → cross-encoder</i></div>
+        <pre class="mermaid">
+flowchart LR
+    Q[Query + user_id filter] --&gt; D[Dense Chroma]
+    Q --&gt; B[BM25 FTS5]
+    D --&gt; RRF[RRF k=60]
+    B --&gt; RRF
+    RRF --&gt; KG[KnowledgeGraph boost]
+    KG --&gt; CE[Cross-encoder top_k]
+    CE --&gt; CTX[Context builder]
+        </pre>
+      </div>
+
+      <div class="callout warn">
+        <div class="ico">⚡</div>
+        <p>Rewrite only runs when retrieve returned <strong>no</strong> documents and <code>retry_count &lt; 1</code> (avoids a 5s rewrite on every weak hit). Rerank failures keep fused order.</p>
+      </div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section id="s6" class="reveal">
+      <div class="sec-head"><span class="sec-num">06</span><h2>Ingest graph <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(documents)</span></h2></div>
+      <div class="rule"></div>
+
+      <div class="diagram">
+        <div class="cap"><b>Ingest + delete</b><i>upload → chunk → embed → index</i></div>
+        <pre class="mermaid">
+flowchart TD
+    Upload[POST /ingest] --&gt; Disk[documents/user_id/doc_id.ext]
+    Disk --&gt; Row[Postgres documents row]
+    Row --&gt; Sync{IS_ASYNC}
+    Sync --&gt;|false| Pipe[IngestionPipeline]
+    Sync --&gt;|true| Celery[Celery worker]
+    Celery --&gt; Pipe
+    Pipe --&gt; Load[Loader txt pdf md csv json]
+    Load --&gt; Clean[Cleaner]
+    Clean --&gt; Chunk[Recursive chunk 1000/200]
+    Chunk --&gt; Embed[Sentence transformer]
+    Embed --&gt; Chroma[Chroma upsert + user_id metadata]
+    Chunk --&gt; FTS[BM25Store data/bm25.db]
+    Delete[DELETE /documents/id] --&gt; ChromaDel[Delete vectors]
+    Delete --&gt; BM25Del[Delete FTS rows]
+    Delete --&gt; FileDel[Delete file + row]
+        </pre>
+      </div>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section id="s7" class="reveal">
+      <div class="sec-head"><span class="sec-num">07</span><h2>Compose topology <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(Docker)</span></h2></div>
+      <div class="rule"></div>
+
+      <p>Public product port is <strong>8002</strong> (UI). API is only on the Docker network. Grafana/Prometheus bind <strong>loopback</strong> so they are not on the internet.</p>
+
+      <div class="diagram">
+        <div class="cap"><b>Container network</b><i>docker-compose.yml</i></div>
+        <pre class="mermaid">
+flowchart TB
+    User((User)) --&gt;|8002| UI[ui Streamlit]
+    UI --&gt;|http://api:8000| API[api uvicorn]
+    API --&gt; PG[(postgres)]
+    API --&gt; RD[(redis)]
+    API --&gt; CH[(chroma)]
+    CW[celery_worker] --&gt; PG
+    CW --&gt; RD
+    CW --&gt; CH
+    Prom[prometheus :9090 loopback] --&gt;|/metrics| API
+    Graf[grafana :3000 loopback] --&gt; Prom
+        </pre>
+      </div>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section id="s8" class="reveal">
+      <div class="sec-head"><span class="sec-num">08</span><h2>All HTTP endpoints</h2></div>
+      <div class="rule"></div>
+
+      <p>OpenAPI: <code>http://localhost:8000/docs</code> (local) or via the API container internally. JWT: header <code>Authorization: Bearer &lt;access_token&gt;</code> except register/login/health/metrics.</p>
+
+      <h3>Ops (no JWT)</h3>
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Method</th><th>Path</th><th>What you get</th></tr></thead>
+          <tbody>
+            <tr><td><span class="m get">GET</span></td><td><code>/health</code></td><td><code>{"status":"ok"}</code> for load balancers / Compose</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/metrics</code></td><td>Prometheus text: <code>rag_chat_requests_total{outcome=...}</code></td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/docs</code></td><td>Swagger UI</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/redoc</code></td><td>ReDoc</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/openapi.json</code></td><td>Schema</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Auth <span style="font-weight:400;color:var(--text-faint);font-size:.85em">— <code>app/api/auth.py</code>, prefix <code>/auth</code></span></h3>
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / notes</th></tr></thead>
+          <tbody>
+            <tr><td><span class="m post">POST</span></td><td><code>/auth/register</code></td><td>no</td><td>JSON <code>{username, email, password}</code> → 201 <code>TokenResponse</code></td></tr>
+            <tr><td><span class="m post">POST</span></td><td><code>/auth/login</code></td><td>no</td><td><strong>OAuth2 form</strong>: <code>username</code> = <strong>email</strong>, <code>password</code></td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/auth/me</code></td><td>JWT</td><td><code>UserInDB</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Chat <span style="font-weight:400;color:var(--text-faint);font-size:.85em">— <code>app/api/query.py</code>, prefix <code>/chat</code></span></h3>
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><span class="m post">POST</span></td><td><code>/chat/</code></td><td>JWT</td><td>Same handler as <code>/chat</code>. Body <code>ChatRequest</code>: <code>question</code>, optional <code>session_id</code>. SSE. Limit <code>RATE_LIMIT_CHAT</code> (default 10/minute).</td></tr>
+            <tr><td><span class="m post">POST</span></td><td><code>/chat</code></td><td>JWT</td><td>Identical</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/chat/conversations</code></td><td>JWT</td><td>Session ids this user owns (checkpoint metadata <code>user_id</code>)</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/chat/conversations/{session_id}</code></td><td>JWT</td><td>Messages from <code>PostgresSaver</code> (<code>chat_history</code> or <code>messages</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Documents <span style="font-weight:400;color:var(--text-faint);font-size:.85em">— <code>app/api/documents.py</code>, no prefix</span></h3>
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><span class="m post">POST</span></td><td><code>/ingest</code></td><td>JWT</td><td>Multipart file. Sync pipeline or Celery.</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/tasks/{task_id}</code></td><td>JWT</td><td>Celery status when async</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/documents</code></td><td>JWT</td><td>Current user’s rows</td></tr>
+            <tr><td><span class="m get">GET</span></td><td><code>/documents/download/{document_id}</code></td><td>JWT</td><td>Original file</td></tr>
+            <tr><td><span class="m del">DELETE</span></td><td><code>/documents/{document_id}</code></td><td>JWT</td><td>Chroma + BM25 + file + row</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>MCP <span style="font-weight:400;color:var(--text-faint);font-size:.85em">(not HTTP)</span></h3>
+      <div class="callout">
+        <div class="ico">🔌</div>
+        <p><code>python -m app.mcp.server</code> — JSON-RPC stdio tools <code>health</code> and <code>ask_rag</code> (HTTP POST <code>/chat/</code> with <code>MCP_JWT</code> and <code>API_BASE_URL</code>).</p>
+      </div>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section id="s9" class="reveal">
+      <div class="sec-head"><span class="sec-num">09</span><h2>Guardrails <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(what is wired)</span></h2></div>
+      <div class="rule"></div>
+
+      <p><code>dependencies.py</code> builds both input and output services for the <strong>master</strong> graph and nested RAG.</p>
+
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Rail</th><th>Wired?</th></tr></thead>
+          <tbody>
+            <tr><td>Input length 10k</td><td><span class="yes">Yes</span></td></tr>
+            <tr><td>Jailbreak denylist</td><td><span class="yes">Yes</span> (<code>JailbreakGuardrail</code>)</td></tr>
+            <tr><td>NeMo prompt injection</td><td><span class="maybe">Conditional</span> — if <code>ENABLE_NEMO=true</code> and rails load; fail-closed on NeMo errors</td></tr>
+            <tr><td>Presidio PII in + out</td><td><span class="maybe">Conditional</span> — if spaCy/Presidio import</td></tr>
+            <tr><td>Output grounding</td><td><span class="yes">Yes</span> — token overlap vs context (refusals score as grounded)</td></tr>
+            <tr><td>Output PII anonymize</td><td><span class="maybe">Conditional</span> — if Presidio ready</td></tr>
+            <tr><td>Llama Guard</td><td><span class="no">No</span> — only if you pass a provider (not constructed today)</td></tr>
+            <tr><td>Output JSON schema on chat</td><td><span class="no">Off</span> — free-form answers. Supervisor routing uses Pydantic structured output</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section id="s10" class="reveal">
+      <div class="sec-head"><span class="sec-num">10</span><h2>Memory</h2></div>
+      <div class="rule"></div>
+
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Kind</th><th>Where</th><th>How to see it</th></tr></thead>
+          <tbody>
+            <tr><td>Short-term / conversation state</td><td>LangGraph checkpoints in Postgres, <code>thread_id</code> = session</td><td><code>GET /chat/conversations/{id}</code>, LangSmith traces</td></tr>
+            <tr><td>Long-term</td><td><code>user_memories</code></td><td>Loaded each turn; extractor after <code>done</code></td></tr>
+            <tr><td>Semantic / episodic</td><td><code>memory_type</code> on those rows</td><td>Extractor JSON</td></tr>
+            <tr><td>Answer cache</td><td>Redis</td><td>Not conversation memory; same question replay</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section id="s11" class="reveal">
+      <div class="sec-head"><span class="sec-num">11</span><h2>How to run</h2></div>
+      <div class="rule"></div>
+
+      <h3>Prerequisites</h3>
+      <ul class="plain">
+        <li>Python 3.11+ (Compose image is 3.13).</li>
+        <li><code>.env</code> with at least <code>JWT_SECRET_KEY</code> (32+ chars) and <code>ANTHROPIC_API_KEY</code> for answers.</li>
+        <li>Postgres for app state. Local default <code>postgresql://rag:rag@localhost:5432/rag</code>. BM25 stays <code>data/bm25.db</code>.</li>
+      </ul>
+
+      <h3>Local API + UI (<code>run.py</code>)</h3>
+      <div class="codeblock">
+        <div class="bar"><span>bash</span><button class="copy" type="button">Copy</button></div>
+<pre><code>pip install -r requirements.txt
+<span class="tok-c"># Postgres must be up (Compose postgres service or local install)</span>
+python run.py</code></pre>
+      </div>
+
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>URL</th><th>What</th></tr></thead>
+          <tbody>
+            <tr><td><a href="http://localhost:8000/docs">http://localhost:8000/docs</a></td><td>All endpoints</td></tr>
+            <tr><td><a href="http://localhost:8000/health">http://localhost:8000/health</a></td><td>Probe</td></tr>
+            <tr><td><a href="http://localhost:8000/metrics">http://localhost:8000/metrics</a></td><td>Counters</td></tr>
+            <tr><td><a href="http://localhost:8501">http://localhost:8501</a></td><td>Streamlit</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Separate processes:</p>
+      <div class="codeblock">
+        <div class="bar"><span>bash</span><button class="copy" type="button">Copy</button></div>
+<pre><code>uvicorn main:app --host 0.0.0.0 --port 8000
+streamlit run frontend/app.py
+<span class="tok-c"># Celery ingest:</span>
+<span class="tok-c"># celery -A app.tasks.celery_app worker --loglevel=info</span></code></pre>
+      </div>
+
+      <p><code>python run.py --no-reload</code> matches production uvicorn (no <code>--reload</code>).</p>
+
+      <h3>Docker (production-shaped)</h3>
+      <div class="codeblock">
+        <div class="bar"><span>bash</span><button class="copy" type="button">Copy</button></div>
+<pre><code>docker compose up --build</code></pre>
+      </div>
+
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>URL</th><th>What</th></tr></thead>
+          <tbody>
+            <tr><td><a href="http://localhost:8002">http://localhost:8002</a></td><td>Streamlit (talks to <code>http://api:8000</code>)</td></tr>
+            <tr><td><a href="http://127.0.0.1:9090">http://127.0.0.1:9090</a></td><td>Prometheus (host loopback)</td></tr>
+            <tr><td><a href="http://127.0.0.1:3000">http://127.0.0.1:3000</a></td><td>Grafana (admin / <code>GRAFANA_ADMIN_PASSWORD</code> or <code>admin</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <div class="ico">🔒</div>
+        <p>API is <strong>not</strong> published; use the UI or <code>docker compose exec api curl -s http://127.0.0.1:8000/health</code>.</p>
+      </div>
+
+      <h3>Evals</h3>
+      <div class="codeblock">
+        <div class="bar"><span>bash</span><button class="copy" type="button">Copy</button></div>
+<pre><code>python evals/run_eval.py --offline
+python evals/run_eval.py --with-ragas          <span class="tok-c"># needs ANTHROPIC_API_KEY</span>
+python evals/run_eval.py --offline --with-deepeval
+<span class="tok-c"># MLflow: set MLFLOW_TRACKING_URI then run eval</span>
+python track_production.py                     <span class="tok-c"># refresh PRODUCTION_TRACKER.md</span></code></pre>
+      </div>
+
+      <h3>MCP (Cursor)</h3>
+      <p>Command: <code>python -m app.mcp.server</code>. Env: <code>API_BASE_URL</code>, <code>MCP_JWT</code> (same JWT as <code>/auth/login</code>).</p>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section id="s12" class="reveal">
+      <div class="sec-head"><span class="sec-num">12</span><h2>How to <em>see</em> logs, graphs, traces</h2></div>
+      <div class="rule"></div>
+
+      <h3>JSON application logs</h3>
+      <p><code>setup_logger()</code> in <code>main.py</code> writes:</p>
+      <ul class="plain">
+        <li>Console (JSON)</li>
+        <li><code>logs/rag.log</code> (rotating)</li>
+        <li><code>logs/error.log</code> (errors only)</li>
+      </ul>
+      <p>Fields include <code>event</code>, <code>session_id</code>, <code>user_id</code>, <code>data</code> (audit: <code>chat.done</code>, <code>chat.blocked</code>, <code>tool.call</code>). Set <code>LOG_DIR</code> to change the folder. Docker: logs volume is the project <code>logs/</code> if the bind mount includes it (<code>.:/app</code>).</p>
+
+      <h3>LangGraph <em>structure</em> (this file)</h3>
+      <p>The mermaid charts above <strong>are</strong> the graph. LangGraph does not host a public UI in this repo.</p>
+
+      <h3>LangGraph <em>runs</em> (LangSmith)</h3>
+      <div class="card">
+        <ol class="steps">
+          <li>Set <code>LANGSMITH_TRACING=true</code>, <code>LANGSMITH_API_KEY</code>, optional <code>LANGSMITH_PROJECT</code>.</li>
+          <li>Restart API (<code>_configure_langsmith</code> sets <code>LANGCHAIN_TRACING_V2</code>).</li>
+          <li>Open <a href="https://smith.langchain.com">LangSmith</a> → project → runs named <code>chat</code>. Nested RAG is a child run (<code>thread_id</code> <code>session_…:rag</code>).</li>
+        </ol>
+      </div>
+
+      <h3>Prometheus</h3>
+      <ul class="plain">
+        <li>Scrape: <code>GET /metrics</code></li>
+        <li>UI (Compose): <a href="http://127.0.0.1:9090">http://127.0.0.1:9090</a> → Graph → query <code>rag_chat_requests_total</code></li>
+      </ul>
+
+      <h3>Grafana</h3>
+      <ul class="plain">
+        <li><a href="http://127.0.0.1:3000">http://127.0.0.1:3000</a> (Compose)</li>
+        <li>Provisioned datasource <strong>Prometheus</strong>, dashboard <strong>RAG API</strong> (<code>observability/grafana/dashboards/rag-api.json</code>)</li>
+        <li>Panel: chat requests by <code>outcome</code> (<code>ok</code>, <code>cache</code>, <code>blocked</code>, <code>error</code>)</li>
+      </ul>
+
+      <h3>Langfuse (optional)</h3>
+      <p>Set <code>LANGFUSE_PUBLIC_KEY</code>, <code>LANGFUSE_SECRET_KEY</code>, optional <code>LANGFUSE_HOST</code>. Chat outcomes are traced <strong>without</strong> prompt/answer PII. If the package or keys are missing, the API continues.</p>
+
+      <h3>Streamlit</h3>
+      <p>Login → sidebar sessions + ingest → chat. Tokens appear as they stream. Session id comes from the <code>done</code> event.</p>
+    </section>
+
+    <!-- ============ 13 ============ -->
+    <section id="s13" class="reveal">
+      <div class="sec-head"><span class="sec-num">13</span><h2>Environment <span style="font-weight:400;color:var(--text-faint);font-size:.62em">(<code>.env</code>)</span></h2></div>
+      <div class="rule"></div>
+
+      <div class="callout stop">
+        <div class="ico">🔐</div>
+        <p>Never commit secrets. Typical keys:</p>
+      </div>
+
+      <div class="tablewrap">
+        <table class="wide">
+          <thead><tr><th>Key</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><code>JWT_SECRET_KEY</code></td><td>Required, ≥32 characters</td></tr>
+            <tr><td><code>ANTHROPIC_API_KEY</code> / <code>ANTHROPIC_MODEL</code></td><td>Claude</td></tr>
+            <tr><td><code>DATABASE_URL</code></td><td>Postgres (<code>postgresql://…</code>); SQLAlchemy uses <code>postgresql+psycopg://</code></td></tr>
+            <tr><td><code>REDIS_URL</code></td><td>Cache + Celery</td></tr>
+            <tr><td><code>CHROMA_HOST</code> / <code>CHROMA_PORT</code> / <code>CHROMA_PERSIST_DIRECTORY</code></td><td>Vectors</td></tr>
+            <tr><td><code>IS_ASYNC</code></td><td>Celery ingest</td></tr>
+            <tr><td><code>ENABLE_NEMO</code> / <code>NEMO_CONFIG_PATH</code></td><td>Injection rails</td></tr>
+            <tr><td><code>RATE_LIMIT_DEFAULT</code> / <code>RATE_LIMIT_CHAT</code></td><td>SlowAPI</td></tr>
+            <tr><td><code>RESPONSE_CACHE_TTL_SECONDS</code></td><td>Redis TTL</td></tr>
+            <tr><td><code>DENSE_TOP_K</code> / <code>BM25_TOP_K</code> / <code>RERANK_TOP_K</code> / <code>CHUNK_*</code></td><td>Retrieval</td></tr>
+            <tr><td><code>HF_TOKEN</code></td><td>Hugging Face downloads</td></tr>
+            <tr><td><code>TAVILY_API_KEY</code></td><td>Preferred web search</td></tr>
+            <tr><td><code>LANGSMITH_*</code></td><td>Tracing</td></tr>
+            <tr><td><code>LANGFUSE_*</code></td><td>Optional traces</td></tr>
+            <tr><td><code>MLFLOW_TRACKING_URI</code></td><td>Eval experiment log</td></tr>
+            <tr><td><code>API_BASE_URL</code></td><td>Streamlit / MCP → API</td></tr>
+            <tr><td><code>MCP_JWT</code></td><td>MCP <code>ask_rag</code></td></tr>
+            <tr><td><code>GRAFANA_ADMIN_PASSWORD</code></td><td>Compose Grafana</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Settings still lists unused MySQL fields; runtime identity is Postgres <code>users</code>.</p>
+    </section>
+
+    <!-- ============ 14 ============ -->
+    <section id="s14" class="reveal">
+      <div class="sec-head"><span class="sec-num">14</span><h2>Non-negotiables</h2></div>
+      <div class="rule"></div>
+
+      <div class="card">
+        <ul class="plain" style="margin:0">
+          <li>Chat = <code>POST /chat/</code> SSE <code>token</code> / <code>done</code> only.</li>
+          <li>One supervisor + hybrid RAG specialist. No basic-RAG toggle.</li>
+          <li>Sessions = <code>session_&lt;uuid&gt;</code>.</li>
+          <li>Retrieval tenant filter happens <strong>before</strong> search, not after.</li>
+          <li>Product UI in Docker is port <strong>8002</strong>; local <code>run.py</code> UI is <strong>8501</strong>.</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer>
+      <span>basic_rag · operator map generated from <code>PROJECT_WORKFLOW.md</code></span>
+      <span>FastAPI · LangGraph · Chroma · SQLite FTS5 · Claude</span>
+    </footer>
+  </main>
+</div>
+
+<button id="top-btn" title="Back to top" type="button">
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 14 6-6 6 6"/></svg>
+</button>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+  const sources = [...document.querySelectorAll("pre.mermaid")].map(el => el.textContent);
+
+  function mermaidTheme() {
+    const light = document.documentElement.dataset.theme === "light";
+    return {
+      startOnLoad: false,
+      securityLevel: "loose",
+      theme: "base",
+      fontFamily: "Inter, system-ui, sans-serif",
+      themeVariables: light ? {
+        background: "#ffffff",
+        primaryColor: "#eef2ff",
+        primaryTextColor: "#10182a",
+        primaryBorderColor: "#6d4aff",
+        lineColor: "#6b7a99",
+        secondaryColor: "#e6fffa",
+        tertiaryColor: "#fdf2ff",
+        clusterBkg: "#f6f8fc",
+        clusterBorder: "#cbd5e6",
+        fontSize: "14px"
+      } : {
+        background: "transparent",
+        primaryColor: "#16213a",
+        primaryTextColor: "#e6edf9",
+        primaryBorderColor: "#8b7bff",
+        lineColor: "#7b8ead",
+        secondaryColor: "#123232",
+        tertiaryColor: "#241b3d",
+        clusterBkg: "rgba(139,123,255,0.05)",
+        clusterBorder: "rgba(148,173,214,0.28)",
+        titleColor: "#e6edf9",
+        nodeTextColor: "#e6edf9",
+        fontSize: "14px"
+      }
+    };
+  }
+
+  async function renderDiagrams() {
+    const nodes = [...document.querySelectorAll("pre.mermaid")];
+    nodes.forEach((el, i) => {
+      el.removeAttribute("data-processed");
+      el.innerHTML = "";
+      el.textContent = sources[i];
+    });
+    mermaid.initialize(mermaidTheme());
+    try {
+      await mermaid.run({ nodes });
+    } catch (err) {
+      console.error("mermaid render failed", err);
+    }
+  }
+
+  await renderDiagrams();
+  window.__renderDiagrams = renderDiagrams;
+</script>
+
+<script>
+  // theme
+  const root = document.documentElement;
+  const themeBtn = document.getElementById("themeBtn");
+  const themeLabel = document.getElementById("themeLabel");
+  const saved = localStorage.getItem("basic_rag_doc_theme");
+  if (saved) root.dataset.theme = saved;
+  const syncLabel = () => { themeLabel.textContent = root.dataset.theme === "light" ? "Dark" : "Light"; };
+  syncLabel();
+  themeBtn.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+    localStorage.setItem("basic_rag_doc_theme", root.dataset.theme);
+    syncLabel();
+    if (window.__renderDiagrams) window.__renderDiagrams();
+  });
+
+  // copy buttons
+  document.querySelectorAll(".copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const pre = btn.closest(".codeblock").querySelector("pre");
+      try {
+        await navigator.clipboard.writeText(pre.innerText);
+        const old = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(() => (btn.textContent = old), 1400);
+      } catch {
+        btn.textContent = "Ctrl+C";
+      }
+    });
+  });
+
+  // scroll progress + back to top
+  const bar = document.getElementById("progress");
+  const topBtn = document.getElementById("top-btn");
+  const onScroll = () => {
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + "%";
+    topBtn.classList.toggle("show", window.scrollY > 600);
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+  topBtn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+
+  // scrollspy
+  const links = [...document.querySelectorAll("#toc a")];
+  const byId = new Map(links.map(a => [a.getAttribute("href").slice(1), a]));
+  const spy = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(a => a.classList.remove("active"));
+        byId.get(e.target.id)?.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-15% 0px -70% 0px" });
+  document.querySelectorAll("section[id]").forEach(s => spy.observe(s));
+
+  // reveal on scroll
+  const reveal = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); reveal.unobserve(e.target); } });
+  }, { rootMargin: "0px 0px -8% 0px" });
+  document.querySelectorAll(".reveal").forEach(el => reveal.observe(el));
+
+  // nav filter
+  const navq = document.getElementById("navq");
+  navq.addEventListener("input", () => {
+    const q = navq.value.trim().toLowerCase();
+    links.forEach(a => a.classList.toggle("hidden", q !== "" && !a.textContent.toLowerCase().includes(q)));
+  });
+</script>
+</body>
+</html>
