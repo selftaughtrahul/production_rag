@@ -2,6 +2,8 @@
 Collection of RAG pipeline node implementations.
 """
 
+import logging
+
 from langchain_core.messages import HumanMessage, AIMessage
 
 from app.core.config import Settings
@@ -10,6 +12,8 @@ from app.memory.persist import persist_from_turn
 from app.memory.service import MemoryService
 from database.sqlite import SessionLocal
 from .state import RAGState
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -104,14 +108,20 @@ class RAGNodes:
             return {"documents": []}
 
         settings = Settings.from_environment()
+        top_k = settings.rerank_top_k
 
-        reranked = self.reranker.rerank(
-            query=query,
-            documents=documents,
-            top_k=settings.rerank_top_k,
-        )
-
-        return {"documents": reranked}
+        try:
+            reranked = self.reranker.rerank(
+                query=query,
+                documents=documents,
+                top_k=top_k,
+            )
+            return {"documents": reranked}
+        except Exception:
+            logger.exception(
+                "Cross-encoder rerank failed; using fused retrieval order"
+            )
+            return {"documents": documents[:top_k]}
 
     # ──────────────────────────────────────────────────────────────────
     # Node 3 — Grade Documents
