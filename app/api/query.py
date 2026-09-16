@@ -1,5 +1,6 @@
 """Single chat API — multi-agent orchestrator over hybrid retrieval."""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -8,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.postgres import PostgresSaver
+from langchain_core.messages import HumanMessage
 
 from database.sqlite import CHECKPOINT_CONNINFO
 
@@ -24,7 +26,11 @@ from app.core.metrics import inc_chat
 from app.core.rate_limit import CHAT_LIMIT, limiter
 from app.models.schemas import ChatRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
-from app.services.cache.response_cache import get_cached_answer, set_cached_answer
+from app.services.cache.response_cache import (
+    get_cached_answer,
+    set_cached_answer,
+    should_bypass_response_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,16 +60,18 @@ def _sse(payload: dict[str, Any]) -> str:
 
 
 async def _run_agent(master_graph: Any, question: str, user_id: str, thread_id: str) -> dict[str, Any]:
-    result = await master_graph.ainvoke(
-        {
-            "query": question,
-            "user_id": user_id,
-            "thread_id": thread_id,
-            "iterations": 0,
-            "max_iterations": 2,
-        },
-        config=_build_graph_config(thread_id, user_id),
-    )
+    async with asyncio.timeout(60):
+        result = await master_graph.ainvoke(
+            {
+                "query": question,
+                "user_id": user_id,
+                "thread_id": thread_id,
+                "messages": [HumanMessage(content=question)],
+                "iterations": 0,
+                "max_iterations": 2,
+            },
+            config=_build_graph_config(thread_id, user_id),
+        )
     trajectory = [
         {
             "agent_name": out.agent_name,
@@ -72,13 +80,45 @@ async def _run_agent(master_graph: Any, question: str, user_id: str, thread_id: 
         }
         for out in result.get("agent_outputs", [])
     ]
+    direct_response = any(
+        bool((item["metadata"] or {}).get("direct_response"))
+        for item in trajectory
+    )
+    operational = any(
+        bool((item["metadata"] or {}).get("operational"))
+        for item in trajectory
+    )
     return {
         "answer": result.get("final_response") or "Unable to synthesize answer.",
         "iterations": result.get("iterations", 1),
         "agent_trajectory": trajectory,
         "guardrail_metadata": result.get("guardrail_metadata", {}),
         "long_term_memories": result.get("long_term_memories") or [],
+        "pending_order_action": result.get("pending_order_action"),
+        "direct_response": direct_response,
+        "operational": operational,
     }
+
+
+async def _has_pending_order_action(
+    master_graph: Any,
+    *,
+    thread_id: str,
+    user_id: str,
+) -> bool:
+    """Check checkpoint state before cache lookup so detail replies cannot be cached."""
+    try:
+        snapshot = await master_graph.aget_state(_build_graph_config(thread_id, user_id))
+    except Exception:
+        logger.warning("Could not inspect pending order state", exc_info=True)
+        return True
+    values = getattr(snapshot, "values", {}) or {}
+    pending = values.get("pending_order_action")
+    return bool(
+        pending
+        and pending.get("user_id") == user_id
+        and pending.get("session_id") == thread_id
+    )
 
 
 def _context_from_agent(agent_result: dict[str, Any]) -> str:
@@ -121,8 +161,17 @@ async def chat(
         yield ": keepalive\n\n"
 
         try:
+            master_graph = await get_master_agent_graph()
+            has_pending_action = await _has_pending_order_action(
+                master_graph,
+                thread_id=thread_id,
+                user_id=user_id,
+            )
+            bypass_cache = has_pending_action or should_bypass_response_cache(question)
             # Redis response cache: key = user_id + query hash
-            cached_answer = get_cached_answer(user_id, question)
+            cached_answer = (
+                None if bypass_cache else get_cached_answer(user_id, question)
+            )
             if cached_answer:
                 logger.info("response_cache hit user_id=%s", user_id)
                 inc_chat("cache")
@@ -151,20 +200,22 @@ async def chat(
                 )
                 return
 
-            master_graph = await get_master_agent_graph()
             agent_result = await _run_agent(master_graph, question, user_id, thread_id)
             context = _context_from_agent(agent_result)
             llm = get_llm()
             pieces: list[str] = []
-            async for token in llm.generate_stream(
-                question=question,
-                context=context,
-                long_term_memories=agent_result.get("long_term_memories") or [],
-            ):
-                if not token:
-                    continue
-                pieces.append(token)
-                yield _sse({"type": "token", "content": token})
+            if agent_result.get("direct_response"):
+                direct_answer = str(agent_result["answer"])
+                pieces.append(direct_answer)
+            else:
+                async for token in llm.generate_stream(
+                    question=question,
+                    context=context,
+                    long_term_memories=agent_result.get("long_term_memories") or [],
+                ):
+                    if not token:
+                        continue
+                    pieces.append(token)
 
             full_answer = "".join(pieces).strip() or agent_result["answer"]
             rails = build_wired_output_guardrails()
@@ -177,7 +228,15 @@ async def chat(
                 **(agent_result.get("guardrail_metadata") or {}),
                 **(rail_result.metadata or {}),
             }
+            pending_action = agent_result.get("pending_order_action")
+            if pending_action:
+                guardrail_metadata["order_action"] = {
+                    "action_id": pending_action.get("action_id"),
+                    "phase": pending_action.get("phase"),
+                    "missing_fields": pending_action.get("missing_fields", []),
+                }
             if not rail_result.passed and rail_result.action == "block":
+                safe_answer = "The answer was blocked by a safety check."
                 inc_chat("blocked")
                 audit_event(
                     "chat.blocked",
@@ -185,12 +244,32 @@ async def chat(
                     session_id=thread_id,
                     data={"stage": "output_guardrail"},
                 )
-                yield _sse({"type": "error", "error": "The answer was blocked by a safety check."})
+                yield _sse({"type": "token", "content": safe_answer})
+                yield _sse(
+                    {
+                        "type": "done",
+                        "session_id": thread_id,
+                        "question": question,
+                        "answer": safe_answer,
+                        "iterations": agent_result["iterations"],
+                        "agent_trajectory": agent_result["agent_trajectory"],
+                        "guardrail_metadata": guardrail_metadata,
+                    }
+                )
                 return
             if rail_result.metadata.get("anonymized_response"):
                 full_answer = rail_result.metadata["anonymized_response"]
+                pieces = [full_answer]
 
-            set_cached_answer(user_id, question, full_answer)
+            for token in pieces or [full_answer]:
+                yield _sse({"type": "token", "content": token})
+
+            if (
+                not bypass_cache
+                and not agent_result.get("operational")
+                and not pending_action
+            ):
+                set_cached_answer(user_id, question, full_answer)
             inc_chat("ok")
             audit_event(
                 "chat.done",

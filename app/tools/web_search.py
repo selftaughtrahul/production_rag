@@ -3,8 +3,16 @@ import logging
 import asyncio
 from typing import Any, Dict, List, Optional, Type
 from pydantic import BaseModel, Field
-from duckduckgo_search import DDGS
-from tavily import AsyncTavilyClient
+
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None
+
+try:
+    from tavily import AsyncTavilyClient
+except ImportError:
+    AsyncTavilyClient = None
 
 from app.tools.base import BaseAgentTool, ToolResult
 
@@ -31,10 +39,19 @@ class WebSearchTool(BaseAgentTool):
     def __init__(self, tavily_api_key: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
         api_key = tavily_api_key or os.getenv("TAVILY_API_KEY")
-        self._tavily_client = AsyncTavilyClient(api_key=api_key) if api_key else None
+        self._tavily_client = (
+            AsyncTavilyClient(api_key=api_key)
+            if api_key and AsyncTavilyClient is not None
+            else None
+        )
 
     def _run(self, query: str, max_results: int = 5) -> str:
         """Synchronous runner calling DuckDuckGo."""
+        if DDGS is None:
+            return self._format_error(
+                "DuckDuckGo search dependency is not installed."
+            ).to_str()
+
         def ddg_search():
             with DDGS() as ddgs:
                 return list(ddgs.text(query, max_results=max_results))

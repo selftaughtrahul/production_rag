@@ -40,6 +40,10 @@ def test_denied_tables_are_detected() -> None:
 def test_query_on_users_is_rejected() -> None:
     result = _tool()._run("SELECT * FROM users")
     assert "restricted table" in result.lower()
+    qualified = _tool()._run("SELECT password FROM public.users")
+    assert "restricted table" in qualified.lower()
+    documents = _tool()._run("SELECT * FROM documents")
+    assert "restricted table" in documents.lower()
 
 
 def test_non_select_error_message() -> None:

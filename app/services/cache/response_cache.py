@@ -13,6 +13,17 @@ _client: Any = None
 _client_failed = False
 
 
+def should_bypass_response_cache(question: str) -> bool:
+    """Operational order turns must never use potentially stale cached answers."""
+    text = question.strip().lower()
+    return (
+        "order" in text
+        or "ord_" in text
+        or text.startswith("confirm order ")
+        or text.startswith("cancel order ")
+    )
+
+
 def cache_key(user_id: str, question: str) -> str:
     digest = hashlib.sha256(question.strip().lower().encode("utf-8")).hexdigest()
     return f"rag:answer:{user_id}:{digest}"

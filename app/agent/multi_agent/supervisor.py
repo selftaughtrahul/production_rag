@@ -5,6 +5,10 @@ from pydantic import BaseModel, Field
 
 from app.agent.multi_agent.route import next_agent
 from app.agent.multi_agent.state import AgentOutput, SupervisorState
+from app.prompts.specialist_prompts import (
+    SUPERVISOR_ROUTING_V2,
+    SUPERVISOR_SYNTHESIS_V2,
+)
 from app.services.llm.claude import ClaudeService
 
 logger = logging.getLogger(__name__)
@@ -16,37 +20,6 @@ class SupervisorDecision(BaseModel):
         description="Select the specialized sub-agent to run next, or 'FINISH' if you have gathered all necessary information.",
     )
     reasoning: str = Field(..., description="Brief explanation for the routing decision.")
-
-
-SUPERVISOR_ROUTING_PROMPT = """\
-You are an Enterprise Multi-Agent Supervisor orchestrating specialized specialist agents to solve user queries.
-
-Specialist Agents:
-1. 'rag_agent': Searches internal company documents, knowledge base, uploaded PDFs, policies, and domain documentation.
-2. 'sql_agent': Inspects internal database tables, schemas, and executes read-only SQL queries (e.g., user counts, orders, system tables).
-3. 'web_agent': Conducts live internet web search for breaking news, current public events, real-time facts, or external entities.
-4. 'general_agent': Handles greetings, pleasantries, creative tasks, math, coding logic, or questions that can be answered from general LLM knowledge WITHOUT external search.
-5. 'FINISH': Choose this when you have sufficient information from previous agent observations to answer the user's question, or if no further sub-agent calls are needed.
-
-Decision Rules:
-- If this is the start and the query is a simple greeting or general knowledge question, select 'general_agent' or 'FINISH'.
-- If the query asks about internal documents or company policies, select 'rag_agent'.
-- If the query asks about database tables, metrics, or row counts, select 'sql_agent'.
-- If the query asks about current events, news, or external public facts, select 'web_agent'.
-- If the user query is multi-part, dispatch to the first relevant specialist. Once that specialist returns with an observation, you can dispatch to the next specialist, or choose 'FINISH'.
-- Do NOT call the same agent multiple times with the exact same query if it already returned a valid result.
-"""
-
-SUPERVISOR_SYNTHESIS_PROMPT = """\
-You are an expert Enterprise AI Assistant.
-Synthesize a comprehensive, clear, and accurate final answer for the user based on the conversation history, user profile, and the observations collected from the specialized agents.
-
-Guidelines:
-- If specialized agent observations are available (RAG documents, SQL queries, or Web search results), cite and integrate them directly.
-- Use long-term memories about the user when relevant to personalize the response.
-- If an agent encountered an error or found no results, be transparent and explain what was checked.
-- Provide a direct, professional, and well-structured answer.
-"""
 
 
 class SupervisorNode:
@@ -69,6 +42,9 @@ class SupervisorNode:
 
         query = state.get("query", "")
         agent_outputs: List[AgentOutput] = state.get("agent_outputs") or []
+        if state.get("pending_order_action") and not agent_outputs:
+            logger.info("Pending order action routes directly to sql_agent")
+            return {"next_node": "sql_agent", "iterations": iterations}
         already_ran = [
             out.agent_name for out in agent_outputs if out.agent_name != "__reset__"
         ]
@@ -103,7 +79,7 @@ Determine the next step:"""
         try:
             decision: SupervisorDecision = await self.llm.agenerate_structured(
                 prompt=prompt,
-                system_prompt=SUPERVISOR_ROUTING_PROMPT,
+                system_prompt=SUPERVISOR_ROUTING_V2,
                 response_model=SupervisorDecision,
             )
             logger.info(f"Supervisor routed to [{decision.next}]. Reason: {decision.reasoning}")
@@ -152,7 +128,7 @@ Synthesize the final answer for the user:"""
 
         final_text = await self.llm.agenerate(
             prompt=prompt,
-            system_prompt=SUPERVISOR_SYNTHESIS_PROMPT,
+            system_prompt=SUPERVISOR_SYNTHESIS_V2,
             max_tokens=1500,
         )
 

@@ -3,6 +3,8 @@
 Edit the hint tuples when a new query type should skip the router call.
 """
 
+import re
+
 GREETING_HINTS = ("hi", "hello", "hey", "thanks", "thank you", "good morning", "good evening")
 RAG_HINTS = (
     "document",
@@ -13,7 +15,14 @@ RAG_HINTS = (
     "from the file",
     "in the docs",
 )
-SQL_HINTS = ("sql", "table", "database", "how many rows", "schema", "select ")
+SQL_HINTS = (
+    "sql",
+    "table",
+    "database",
+    "how many rows",
+    "schema",
+    "select ",
+)
 WEB_HINTS = (
     "latest news",
     "today's",
@@ -60,7 +69,7 @@ def next_agent(query: str, already_ran: list[str]) -> str | None:
     hits = []
     if _has_hint(text, RAG_HINTS):
         hits.append("rag_agent")
-    if _has_hint(text, SQL_HINTS):
+    if _has_hint(text, SQL_HINTS) or re.search(r"\borders?\b|\bord_[\w-]+\b", text):
         hits.append("sql_agent")
     if wants_web(text):
         hits.append("web_agent")

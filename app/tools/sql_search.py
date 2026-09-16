@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 DENIED_TABLES = {
     "users",
+    "documents",
     "user_memories",
     "checkpoints",
     "checkpoint_writes",
@@ -22,7 +23,11 @@ DENIED_TABLES = {
     "information_schema",
 }
 _TABLE_REF = re.compile(
-    r'\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+["\'`]?(\w+)',
+    r'\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+["\'`]?([\w.]+)',
+    re.IGNORECASE,
+)
+_BLOCKED_READ_FUNCTIONS = re.compile(
+    r"\b(?:pg_sleep|pg_read_file|pg_read_binary_file|dblink|lo_import|lo_export)\s*\(",
     re.IGNORECASE,
 )
 _BLOCKED_OPS = [
@@ -37,7 +42,10 @@ def _strip_sql_comments(sql_statement: str) -> str:
 
 
 def _referenced_tables(sql_statement: str) -> set[str]:
-    return {match.group(1).lower() for match in _TABLE_REF.finditer(sql_statement)}
+    return {
+        match.group(1).split(".")[-1].strip("\"'`").lower()
+        for match in _TABLE_REF.finditer(sql_statement)
+    }
 
 
 class SQLQueryInput(BaseModel):
@@ -72,6 +80,8 @@ class SQLQueryTool(BaseAgentTool):
         for kw in _BLOCKED_OPS:
             if re.search(kw, cleaned, re.IGNORECASE):
                 return False
+        if _BLOCKED_READ_FUNCTIONS.search(cleaned):
+            return False
         return cleaned.upper().startswith("SELECT") or cleaned.upper().startswith("WITH")
 
     def _run(self, query: str) -> str:

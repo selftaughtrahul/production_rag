@@ -6,13 +6,15 @@ from app.agent.multi_agent.supervisor import SupervisorNode
 from app.agent.multi_agent.nodes import (
     InputGuardrailNode,
     LoadMemoryNode,
-    RAGSubGraphNode,
-    SQLSubGraphNode,
-    WebAgentNode,
-    GeneralLLMNode,
     OutputGuardrailNode,
     SaveMemoryNode,
     ErrorHandlerNode,
+)
+from app.agent.multi_agent.specialists import (
+    GeneralLLMNode,
+    RAGSubGraphNode,
+    SQLSubGraphNode,
+    WebAgentNode,
 )
 from app.guardrails.input_service import InputGuardrailService
 from app.guardrails.output_service import OutputGuardrailService
@@ -50,7 +52,7 @@ def build_master_agent_graph(
     )
     sql_node = SQLSubGraphNode(llm=llm, tool_registry=tool_registry)
     web_node = WebAgentNode(llm=llm, tool_registry=tool_registry)
-    general_node = GeneralLLMNode(llm=llm)
+    general_node = GeneralLLMNode(llm=llm, tool_registry=tool_registry)
 
     output_guardrail_node = OutputGuardrailNode(guardrail_service=output_guardrails)
     save_memory_node = SaveMemoryNode(llm=llm)
