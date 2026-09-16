@@ -55,7 +55,7 @@ def _as_unavailable(exc: Exception) -> LLMUnavailableError | None:
         )
     if isinstance(exc, RateLimitError):
         return LLMUnavailableError(_provider_message(exc))
-    if isinstance(exc, APIConnectionError):
+    if isinstance(exc, (APIConnectionError, APITimeoutError)):
         return LLMUnavailableError(
             "The AI provider is unreachable right now. Please try again shortly."
         )
@@ -106,7 +106,7 @@ def _reraise_unavailable(exc: Exception) -> None:
     retry=retry_if_exception(_is_retryable),
     before_sleep=before_sleep_log(logger, logging.WARNING),
 )
-def _messages_create_with_retry(client: Anthropic, **kwargs):
+def _messages_create_with_retry(client: Anthropic, **kwargs: object):
     return client.messages.create(timeout=_LLM_TIMEOUT_SECONDS, **kwargs)
 
 
@@ -117,7 +117,7 @@ def _messages_create_with_retry(client: Anthropic, **kwargs):
     retry=retry_if_exception(_is_retryable),
     before_sleep=before_sleep_log(logger, logging.WARNING),
 )
-async def _amessages_create_with_retry(client: AsyncAnthropic, **kwargs):
+async def _amessages_create_with_retry(client: AsyncAnthropic, **kwargs: object):
     return await client.messages.create(timeout=_LLM_TIMEOUT_SECONDS, **kwargs)
 
 
@@ -387,12 +387,10 @@ Guidelines:
             kwargs["system"] = system_prompt
 
         try:
-            response = await self.async_client.messages.create(**kwargs)
+            response = await _amessages_create_with_retry(self.async_client, **kwargs)
         except Exception as exc:
-            unavailable = _as_unavailable(exc)
-            if unavailable is not None:
-                raise unavailable from exc
-            raise
+            _reraise_unavailable(exc)
+        _log_usage(response)
         return response.content[0].text.strip()
 
     async def agenerate_structured(
