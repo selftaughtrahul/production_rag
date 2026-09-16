@@ -44,18 +44,28 @@ def thread_owner(session_id: str) -> str | None:
         session.close()
 
 
-def _owner_from_metadata(metadata) -> str | None:
-    if not metadata:
+def _owner_from_metadata(metadata: object) -> str | None:
+    """Read user_id from checkpoint metadata (dict, JSON str, or bytes)."""
+    if metadata is None:
         return None
-    try:
-        if isinstance(metadata, dict):
-            return metadata.get("user_id")
-        if isinstance(metadata, bytes):
+    if isinstance(metadata, memoryview):
+        metadata = metadata.tobytes()
+    if isinstance(metadata, (bytes, bytearray)):
+        try:
             metadata = metadata.decode("utf-8")
-        meta_dict = json.loads(metadata)
-        return meta_dict.get("user_id")
-    except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
-        return None
+        except UnicodeDecodeError:
+            return None
+    if isinstance(metadata, str):
+        if not metadata:
+            return None
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(metadata, dict):
+        user_id = metadata.get("user_id")
+        return user_id if isinstance(user_id, str) else None
+    return None
 
 
 def ensure_session_owner(session_id: str | None, user_id: str) -> None:

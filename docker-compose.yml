@@ -56,6 +56,7 @@ services:
     volumes:
       - .:/app
       - ./documents:/app/documents
+      - api_logs:/app/logs
     env_file:
       - .env
     environment:
@@ -81,6 +82,7 @@ services:
     volumes:
       - .:/app
       - ./documents:/app/documents
+      - api_logs:/app/logs
     env_file:
       - .env
     environment:
@@ -157,3 +159,4 @@ volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
+  api_logs:

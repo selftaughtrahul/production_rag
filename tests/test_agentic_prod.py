@@ -36,6 +36,16 @@ def test_jailbreak_allows_normal_question() -> None:
     assert result.passed is True
 
 
+def test_jailbreak_allows_system_prompt_question_without_nemo() -> None:
+    result = asyncio.run(
+        JailbreakGuardrail(provider=None).check(
+            "What does a system prompt do in this RAG app?"
+        )
+    )
+    assert result.passed is True
+    assert result.action == "allow"
+
+
 def test_invoke_tool_requires_approval() -> None:
     tool = MagicMock()
     tool.name = "send_email"

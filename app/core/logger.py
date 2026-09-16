@@ -59,8 +59,6 @@ class JSONFormatter(logging.Formatter):
 
 def setup_logger() -> logging.Logger:
 
-    os.makedirs(LOG_DIR, exist_ok=True)
-
     logger = logging.getLogger("rag")
 
     logger.setLevel(logging.INFO)
@@ -71,49 +69,34 @@ def setup_logger() -> logging.Logger:
 
     formatter = JSONFormatter()
 
-    # -------------------------------------------------
-    # RAG LOG
-    # -------------------------------------------------
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        rag_handler = RotatingFileHandler(
+            filename=os.path.join(LOG_DIR, "rag.log"),
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        rag_handler.setLevel(logging.INFO)
+        rag_handler.setFormatter(formatter)
+        logger.addHandler(rag_handler)
 
-    rag_handler = RotatingFileHandler(
-        filename=os.path.join(LOG_DIR, "rag.log"),
-        maxBytes=MAX_LOG_SIZE,
-        backupCount=BACKUP_COUNT,
-        encoding="utf-8",
-    )
-
-    rag_handler.setLevel(logging.INFO)
-    rag_handler.setFormatter(formatter)
-
-    # -------------------------------------------------
-    # ERROR LOG
-    # -------------------------------------------------
-
-    error_handler = RotatingFileHandler(
-        filename=os.path.join(LOG_DIR, "error.log"),
-        maxBytes=MAX_LOG_SIZE,
-        backupCount=BACKUP_COUNT,
-        encoding="utf-8",
-    )
-
-    error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(formatter)
-
-    # -------------------------------------------------
-    # CONSOLE
-    # -------------------------------------------------
+        error_handler = RotatingFileHandler(
+            filename=os.path.join(LOG_DIR, "error.log"),
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(formatter)
+        logger.addHandler(error_handler)
+    except OSError:
+        pass
 
     console_handler = logging.StreamHandler(sys.stdout)
 
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
-
-    # -------------------------------------------------
-    # REGISTER HANDLERS
-    # -------------------------------------------------
-
-    logger.addHandler(rag_handler)
-    logger.addHandler(error_handler)
     logger.addHandler(console_handler)
 
     logger.propagate = False

@@ -11,13 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source code
-COPY . .
+RUN useradd --create-home --uid 10001 appuser
 
-# Create necessary directories
+COPY --chown=appuser:appuser . .
 RUN mkdir -p documents/temp data/chroma_db logs \
-    && useradd --create-home --uid 10001 appuser \
-    && chown -R appuser:appuser /app
+    && chown -R appuser:appuser /app \
+    && chmod 775 documents documents/temp data data/chroma_db logs
 
 USER appuser
 
