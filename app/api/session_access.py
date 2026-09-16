@@ -1,4 +1,4 @@
-"""Session ownership checks against the LangGraph SQLite checkpointer."""
+"""Session ownership checks against the LangGraph Postgres checkpointer."""
 
 from __future__ import annotations
 
@@ -48,6 +48,8 @@ def _owner_from_metadata(metadata) -> str | None:
     if not metadata:
         return None
     try:
+        if isinstance(metadata, dict):
+            return metadata.get("user_id")
         if isinstance(metadata, bytes):
             metadata = metadata.decode("utf-8")
         meta_dict = json.loads(metadata)
@@ -72,9 +74,7 @@ def list_owned_thread_ids(user_id: str) -> list[str]:
         table = _checkpoints_table(session)
         if table is None:
             return []
-        rows = session.execute(
-            select(table.c.thread_id, table.c["metadata"]).group_by(table.c.thread_id)
-        ).all()
+        rows = session.execute(select(table.c.thread_id, table.c["metadata"])).all()
         sessions: set[str] = set()
         for thread_id, metadata in rows:
             if _owner_from_metadata(metadata) == user_id:

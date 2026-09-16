@@ -72,6 +72,7 @@ class Settings:
     jwt_secret_key: str
     jwt_algorithm: str
     jwt_expire_minutes: int
+    database_url: str
     rate_limit_default: str
     rate_limit_chat: str
     response_cache_ttl_seconds: int
@@ -125,6 +126,10 @@ class Settings:
             jwt_secret_key=_require_jwt_secret(),
             jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
             jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "60")),
+            database_url=os.getenv(
+                "DATABASE_URL",
+                "postgresql://rag:rag@localhost:5432/rag",
+            ),
             rate_limit_default=os.getenv("RATE_LIMIT_DEFAULT", "60/minute"),
             rate_limit_chat=os.getenv("RATE_LIMIT_CHAT", "10/minute"),
             response_cache_ttl_seconds=int(os.getenv("RESPONSE_CACHE_TTL_SECONDS", "3600")),

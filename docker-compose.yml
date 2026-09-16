@@ -26,6 +26,24 @@ services:
       IS_PERSISTENT: "TRUE"
       PERSIST_DIRECTORY: /chroma/data
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: basic_rag_postgres
+    restart: unless-stopped
+    networks:
+      - basic_rag
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag}
+      POSTGRES_DB: ${POSTGRES_DB:-rag}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: .
     container_name: basic_rag_api
@@ -44,11 +62,14 @@ services:
       REDIS_URL: redis://redis:6379/0
       CHROMA_HOST: chroma
       CHROMA_PORT: "8000"
+      DATABASE_URL: postgresql://rag:rag@postgres:5432/rag
     depends_on:
       redis:
         condition: service_healthy
       chroma:
         condition: service_started
+      postgres:
+        condition: service_healthy
 
   celery_worker:
     build: .
@@ -66,11 +87,14 @@ services:
       REDIS_URL: redis://redis:6379/0
       CHROMA_HOST: chroma
       CHROMA_PORT: "8000"
+      DATABASE_URL: postgresql://rag:rag@postgres:5432/rag
     depends_on:
       redis:
         condition: service_healthy
       chroma:
         condition: service_started
+      postgres:
+        condition: service_healthy
 
   ui:
     build: .
@@ -95,3 +119,4 @@ networks:
 volumes:
   redis_data:
   chroma_data:
+  postgres_data:

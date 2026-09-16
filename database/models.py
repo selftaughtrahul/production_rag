@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for the application SQLite database."""
+"""SQLAlchemy ORM models for application state (Postgres)."""
 
 from __future__ import annotations
 

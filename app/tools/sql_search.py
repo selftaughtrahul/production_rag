@@ -17,6 +17,9 @@ DENIED_TABLES = {
     "writes",
     "sqlite_master",
     "sqlite_sequence",
+    "checkpoint_migrations",
+    "pg_catalog",
+    "information_schema",
 }
 _TABLE_REF = re.compile(
     r'\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+["\'`]?(\w+)',

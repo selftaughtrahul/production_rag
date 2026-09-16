@@ -7,7 +7,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.postgres import PostgresSaver
+
+from database.sqlite import CHECKPOINT_CONNINFO
 
 from app.api.dependencies import (
     build_wired_output_guardrails,
@@ -209,7 +211,7 @@ async def get_conversation_history(session_id: str,current_user: UserInDB = Depe
 
     config = {"configurable": {"thread_id": session_id}}
 
-    with SqliteSaver.from_conn_string("rag_database.db") as cp:
+    with PostgresSaver.from_conn_string(CHECKPOINT_CONNINFO) as cp:
         checkpoint = cp.get(config)
 
         if not checkpoint:

@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 23:16`
+- Last scan: `2026-09-16 23:26`
 - Command: `python track_production.py`
-- Closed items: **24/28 (86%)**
+- Closed items: **25/28 (89%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -15,7 +15,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | P0 | 16 | 1 | 1 | 18 |
 | P1 | 5 | 0 | 0 | 5 |
 | P2 | 2 | 0 | 0 | 2 |
-| P3 | 1 | 1 | 1 | 3 |
+| P3 | 2 | 1 | 0 | 3 |
 
 ## How we use this
 
@@ -71,7 +71,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | ------ | -- | ---- | --- | ------------ |
 | 🟡 | `p3-docker-prod` | Prod Compose (no --reload, non-root) | Safe container run | Drop --reload; USER in Dockerfile |
 | ✅ | `p3-cicd` | GitHub Actions CI | Lint/test before merge | Add .github/workflows/ci.yml |
-| ⬜ | `p3-postgres` | Postgres instead of SQLite for app state | Multi-instance API | Move users/memories/checkpoints to RDS |
+| ✅ | `p3-postgres` | Postgres instead of SQLite for app state | Multi-instance API | Move users/memories/checkpoints to RDS |
 
 ## Next action
 

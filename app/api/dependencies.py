@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Optional
 
-import aiosqlite
 from fastapi import Depends
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 from sentence_transformers import CrossEncoder
 
 from app.core.config import Settings
@@ -32,28 +33,40 @@ from app.services.retriever.hybrid import HybridRetriever
 from app.services.retriever.reranker import CrossEncoderReranker
 from app.services.vectorstore.chroma import ChromaVectorStore
 from app.tools.registry import ToolRegistry, build_default_tool_registry
-from database.sqlite import DB_FILE_PATH
-from database.sqlite import engine as sqlite_engine
+from database.sqlite import CHECKPOINT_CONNINFO
+from database.sqlite import engine as db_engine
 
 from app.agent.multi_agent.master_graph import build_master_agent_graph
 
 logger = logging.getLogger(__name__)
 
-_checkpointer: AsyncSqliteSaver | None = None
+_checkpointer: AsyncPostgresSaver | None = None
+_checkpointer_pool: AsyncConnectionPool | None = None
 _checkpointer_lock = asyncio.Lock()
 _compiled_graphs: dict[str, Any] = {}
 _graph_lock = asyncio.Lock()
 
 
-async def get_checkpointer() -> AsyncSqliteSaver:
-    """Lazy async SQLite checkpointer. SqliteSaver cannot be used with ainvoke."""
-    global _checkpointer
+async def get_checkpointer() -> AsyncPostgresSaver:
+    """Lazy async Postgres checkpointer shared for the process lifetime."""
+    global _checkpointer, _checkpointer_pool
     if _checkpointer is not None:
         return _checkpointer
     async with _checkpointer_lock:
         if _checkpointer is None:
-            conn = await aiosqlite.connect(DB_FILE_PATH)
-            saver = AsyncSqliteSaver(conn)
+            _checkpointer_pool = AsyncConnectionPool(
+                conninfo=CHECKPOINT_CONNINFO,
+                min_size=1,
+                max_size=10,
+                kwargs={
+                    "autocommit": True,
+                    "prepare_threshold": 0,
+                    "row_factory": dict_row,
+                },
+                open=False,
+            )
+            await _checkpointer_pool.open()
+            saver = AsyncPostgresSaver(conn=_checkpointer_pool)
             await saver.setup()
             _checkpointer = saver
     return _checkpointer
@@ -136,7 +149,7 @@ def build_ingestion_pipeline(source: str) -> IngestionPipeline:
     )
 
 
-def _build_common_rag_graph(retriever, checkpointer: AsyncSqliteSaver):
+def _build_common_rag_graph(retriever, checkpointer: AsyncPostgresSaver):
     """Helper to build a RAG graph with shared components."""
     settings = Settings.from_environment()
     context_builder = ContextBuilder()
@@ -242,7 +255,7 @@ def get_tool_registry(
     global _tool_registry_instance
     if _tool_registry_instance is None:
         _tool_registry_instance = build_default_tool_registry(
-            retriever=retriever, db_engine=sqlite_engine
+            retriever=retriever, db_engine=db_engine
         )
     return _tool_registry_instance
 
@@ -253,7 +266,7 @@ async def get_master_agent_graph():
     Equipped with:
       - Supervisor-level input & output guardrails
       - Supervisor-level conversational memory checkpointer
-      - Long-term memory extraction & SQLite persistence
+      - Long-term memory extraction & Postgres persistence
       - Specialized sub-agents (RAG, SQL, Web, General)
     """
     if "agent" in _compiled_graphs:
