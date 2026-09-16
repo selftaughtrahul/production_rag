@@ -19,6 +19,7 @@ from app.core.exceptions import LLMUnavailableError
 from app.core.rate_limit import CHAT_LIMIT, limiter
 from app.models.schemas import ChatRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
+from app.services.cache.response_cache import get_cached_answer, set_cached_answer
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,24 @@ async def chat(
         yield ": keepalive\n\n"
 
         try:
+            # Redis response cache: key = user_id + query hash
+            cached_answer = get_cached_answer(user_id, question)
+            if cached_answer:
+                logger.info("response_cache hit user_id=%s", user_id)
+                yield _sse({"type": "token", "content": cached_answer})
+                yield _sse(
+                    {
+                        "type": "done",
+                        "session_id": thread_id,
+                        "question": question,
+                        "answer": cached_answer,
+                        "iterations": 0,
+                        "agent_trajectory": [],
+                        "guardrail_metadata": {"response_cache": "hit"},
+                    }
+                )
+                return
+
             master_graph = await get_master_agent_graph()
             agent_result = await _run_agent(master_graph, question, user_id, thread_id)
             context = _context_from_agent(agent_result)
@@ -146,6 +165,8 @@ async def chat(
                 return
             if rail_result.metadata.get("anonymized_response"):
                 full_answer = rail_result.metadata["anonymized_response"]
+
+            set_cached_answer(user_id, question, full_answer)
 
             yield _sse(
                 {

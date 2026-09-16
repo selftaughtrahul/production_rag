@@ -74,6 +74,7 @@ class Settings:
     jwt_expire_minutes: int
     rate_limit_default: str
     rate_limit_chat: str
+    response_cache_ttl_seconds: int
 
     # ── Retrieval Top-K ───────────────────────
     dense_top_k: int
@@ -126,6 +127,7 @@ class Settings:
             jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "60")),
             rate_limit_default=os.getenv("RATE_LIMIT_DEFAULT", "60/minute"),
             rate_limit_chat=os.getenv("RATE_LIMIT_CHAT", "10/minute"),
+            response_cache_ttl_seconds=int(os.getenv("RESPONSE_CACHE_TTL_SECONDS", "3600")),
             # Top-K retrieval settings
             dense_top_k=int(os.getenv("DENSE_TOP_K", "20")),
             bm25_top_k=int(os.getenv("BM25_TOP_K", "20")),

@@ -2,9 +2,9 @@
 
 This file is **generated**. Do not edit it by hand.
 
-- Last scan: `2026-09-16 23:14`
+- Last scan: `2026-09-16 23:16`
 - Command: `python track_production.py`
-- Closed items: **23/28 (82%)**
+- Closed items: **24/28 (86%)**
 
 Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 
@@ -14,7 +14,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | -------- | ---- | ------- | ---- | ----- |
 | P0 | 16 | 1 | 1 | 18 |
 | P1 | 5 | 0 | 0 | 5 |
-| P2 | 1 | 0 | 1 | 2 |
+| P2 | 2 | 0 | 0 | 2 |
 | P3 | 1 | 1 | 1 | 3 |
 
 ## How we use this
@@ -63,7 +63,7 @@ Status: ✅ done (code evidence) · 🟡 partial · ⬜ not done
 | Status | ID | Item | Why | How to close |
 | ------ | -- | ---- | --- | ------------ |
 | ✅ | `p2-rate-limit` | API rate limiting | Cost and abuse | SlowAPI or gateway throttle per user_id |
-| ⬜ | `p2-cache` | Response/semantic cache | Repeat-question cost | Redis keyed by user + query hash |
+| ✅ | `p2-cache` | Response/semantic cache | Repeat-question cost | Redis keyed by user + query hash |
 
 ## P3
 
