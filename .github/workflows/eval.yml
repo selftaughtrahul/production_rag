@@ -30,6 +30,6 @@ jobs:
       - name: Install unit-test dependencies
         run: >
           pip install pytest==8.3.5 sqlalchemy langchain-core pydantic
-          python-jose passlib argon2-cffi python-dotenv langsmith
+          python-jose passlib argon2-cffi python-dotenv langsmith slowapi
       - name: Routing, SQL allowlist, auth, and hybrid retrieve
         run: python -m pytest tests/ -q

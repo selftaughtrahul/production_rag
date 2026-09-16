@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.sqlite import SqliteSaver
 
@@ -16,6 +16,7 @@ from app.api.dependencies import (
 )
 from app.api.session_access import ensure_session_owner, list_owned_thread_ids
 from app.core.exceptions import LLMUnavailableError
+from app.core.rate_limit import CHAT_LIMIT, limiter
 from app.models.schemas import ChatRequest, UserInDB
 from app.services.auth.dependencies import get_current_user
 
@@ -89,18 +90,23 @@ def _context_from_agent(agent_result: dict[str, Any]) -> str:
 
 @router.post("", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
 @router.post("/", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
-async def chat(request: ChatRequest,current_user: UserInDB = Depends(get_current_user),):
+@limiter.limit(CHAT_LIMIT)
+async def chat(
+    request: Request,
+    body: ChatRequest,
+    current_user: UserInDB = Depends(get_current_user),
+):
     """
     Single chat pipeline: the supervisor routes each turn to the RAG, SQL, web,
     or general specialist. The RAG specialist retrieves with dense + BM25 + RRF
     fusion and a cross-encoder rerank.
     """
-    question = request.question.strip()
+    question = body.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    ensure_session_owner(request.session_id, current_user.id)
-    thread_id = request.session_id or generate_new_session_id()
+    ensure_session_owner(body.session_id, current_user.id)
+    thread_id = body.session_id or generate_new_session_id()
     user_id = current_user.id
 
     async def event_generator():

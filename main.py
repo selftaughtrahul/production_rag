@@ -14,6 +14,7 @@ from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.query import router as chat_router
 from app.core.config import Settings
+from app.core.rate_limit import attach_rate_limiter
 from database.sqlite import init_db
 
 logger = logging.getLogger(__name__)
@@ -64,4 +65,5 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
+attach_rate_limiter(app)
 
