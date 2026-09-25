@@ -80,6 +80,8 @@ def ensure_session_owner(session_id: str | None, user_id: str) -> None:
 def list_owned_thread_ids(user_id: str) -> list[str]:
     """Return checkpoint thread IDs owned by the given user."""
     session = SessionLocal()
+    session_dict = {}
+   
     try:
         table = _checkpoints_table(session)
         if table is None:
@@ -92,5 +94,60 @@ def list_owned_thread_ids(user_id: str) -> list[str]:
         return list(sessions)
     except OperationalError:
         return []
+    finally:
+        session.close()
+
+        
+def list_owned_conversations(user_id: str) -> list[dict]:
+    """Return checkpoint conversations owned by the given user."""
+    session = SessionLocal()
+
+    try:
+        table = _checkpoints_table(session)
+
+        if table is None:
+            return []
+
+        rows = session.execute(
+            select(
+                table.c.thread_id,
+                table.c["metadata"],
+            )
+        ).all()
+
+        conversations = {}
+
+        for thread_id, metadata in rows:
+            if _owner_from_metadata(metadata) != user_id:
+                continue
+
+            conversations.setdefault(
+                thread_id,
+                {
+                    "session_id": thread_id,
+                    "first_message": None,
+                },
+            )
+
+        # Use your existing conversation function
+        for conversation in conversations.values():
+            session_id = conversation["session_id"]
+
+            try:
+                messages = get_conversation(session_id)
+
+                for message in messages:
+                    if message.get("role") in {"user", "human"}:
+                        conversation["first_message"] = message.get("content", "")
+                        break
+
+            except Exception:
+                conversation["first_message"] = None
+
+        return list(conversations.values())
+
+    except OperationalError:
+        return []
+
     finally:
         session.close()
