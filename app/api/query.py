@@ -16,7 +16,7 @@ from app.api.dependencies import (
     get_llm,
     get_master_agent_graph,
 )
-from app.api.session_access import ensure_session_owner, list_owned_thread_ids
+from app.api.session_access import ensure_session_owner, list_owned_conversations
 from app.core.audit import audit_event
 from app.core.exceptions import LLMUnavailableError
 from app.core.langfuse_tracer import trace_chat
@@ -337,7 +337,9 @@ async def chat(
 
 @router.get("/conversations", summary="List user conversations")
 async def list_conversations(current_user: UserInDB = Depends(get_current_user)):
-    return {"success": True, "sessions": list_owned_thread_ids(current_user.id)}
+
+    conversations = list_owned_conversations(current_user.id)
+    return {"success": True, "sessions": conversations}
 
 
 @router.get("/conversations/{session_id}", summary="Get conversation chat history")
