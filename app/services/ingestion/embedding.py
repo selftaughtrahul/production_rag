@@ -1,8 +1,15 @@
 from __future__ import annotations
+
+import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
+
+from langchain_openai import OpenAIEmbeddings
+
 from app.services.vectorstore.models import EmbeddedChunk
 from .chunker import Chunk
-from langchain_openai import OpenAIEmbeddings
+
+logger = logging.getLogger(__name__)
 
 class EmbeddingProvider(ABC):
     @abstractmethod
@@ -34,22 +41,32 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         return 1536
 
 class HuggingFaceEmbeddingProvider(EmbeddingProvider):
-    def __init__(self, model: str = "sentence-transformers/all-MiniLM-L6-v2", *, device: str | None = None):
+    def __init__(self, model: str = "Qwen/Qwen3-Embedding-0.6B", *, device: str | None = None):
         from sentence_transformers import SentenceTransformer
 
         from app.core.device import resolve_torch_device
 
         from app.core.config import Settings
 
+        settings = Settings.from_environment()
         device = resolve_torch_device(device)
-        token = Settings.from_environment().hf_token
+        token = settings.hf_token
+        model_path = settings.local_model_path(model)
         self.model_name = model
         self.device = device
+        local_only = Path(model_path).is_dir()
+        logger.info("Loading embedding model from %s (local_only=%s)", model_path, local_only)
         try:
             self.model = SentenceTransformer(
-                model, device=device, token=token, local_files_only=True
+                model_path, device=device, token=token, local_files_only=local_only
             )
-        except Exception:
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "Local embedding load failed for %s: %s; retrying from Hub id %s",
+                model_path,
+                exc,
+                model,
+            )
             self.model = SentenceTransformer(model, device=device, token=token)
         dimension_getter = getattr(self.model, "get_embedding_dimension", None)
         if dimension_getter is None:
