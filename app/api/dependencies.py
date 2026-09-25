@@ -2,6 +2,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import Depends
@@ -84,7 +85,7 @@ class RAGComponents:
 
 @lru_cache(maxsize=1)
 def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddingProvider:
-    print("Loading embedding model...")
+    logger.info("Loading embedding model %s", model)
     return HuggingFaceEmbeddingProvider(
         model=model,
         device=device,
@@ -93,12 +94,23 @@ def get_embedding_provider(model: str, device: str | None) -> HuggingFaceEmbeddi
 
 @lru_cache(maxsize=1)
 def get_cross_encoder_model(model: str, device: str | None = None) -> CrossEncoder:
+    settings = Settings.from_environment()
     resolved = resolve_torch_device(device)
-    token = Settings.from_environment().hf_token
-    print(f"Loading cross encoder model: {model} on {resolved}...")
+    token = settings.hf_token
+    model_path = settings.local_model_path(model)
+    local_only = Path(model_path).is_dir()
+    logger.info("Loading cross encoder model %s on %s (local_only=%s)", model_path, resolved, local_only)
     try:
-        return CrossEncoder(model, device=resolved, token=token, local_files_only=True)
-    except Exception:
+        return CrossEncoder(
+            model_path, device=resolved, token=token, local_files_only=local_only
+        )
+    except (OSError, ValueError) as exc:
+        logger.warning(
+            "Local cross-encoder load failed for %s: %s; retrying from Hub id %s",
+            model_path,
+            exc,
+            model,
+        )
         return CrossEncoder(model, device=resolved, token=token)
 
 
