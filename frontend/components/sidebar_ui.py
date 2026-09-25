@@ -23,11 +23,20 @@ def render_sidebar(api_client):
             st.session_state.messages = []
             st.rerun()
 
-        for session_id in sessions:
-            if st.button(session_id[:8] + "...", key=f"session_{session_id}"):
+        for conversation in sessions:
+            session_id = conversation["session_id"]
+            first_message = conversation.get("first_message") or "New conversation"
+
+            if len(first_message) > 45:
+                first_message = first_message[:45] + "..."
+
+            if st.button(
+                first_message,
+                key=f"session_{session_id}",
+                use_container_width=True,
+            ):
                 st.session_state.current_session_id = session_id
-                messages = api_client.get_conversation(session_id)
-                st.session_state.messages = messages
+                st.session_state.messages = api_client.get_conversation(session_id)
                 st.rerun()
 
         st.divider()
