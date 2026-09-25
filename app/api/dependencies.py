@@ -6,9 +6,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import Depends
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
+import aiosqlite
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from sentence_transformers import CrossEncoder
 
 from app.core.config import Settings
@@ -26,52 +25,38 @@ from app.services.ingestion.embedding import EmbeddingService, HuggingFaceEmbedd
 from app.services.ingestion.pipeline import IngestionPipeline
 from app.services.llm.claude import ClaudeService
 from app.services.rag.graph import build_rag_graph
-from app.services.retriever.bm25 import BM25Retriever
-from app.services.retriever.bm25_store import BM25Store
+from app.services.retriever.base import Retriever
 from app.services.retriever.context import ContextBuilder
-from app.services.retriever.dense import DenseRetriever
-from app.services.retriever.hybrid import HybridRetriever
+from app.services.retriever.qdrant_retreiver import QdrantHybridRetriever
 from app.services.retriever.reranker import CrossEncoderReranker
-from app.services.vectorstore.chroma import ChromaVectorStore
 from app.tools.registry import ToolRegistry, build_default_tool_registry
 from database.order_store import (
     OrderRepository,
     create_order_engine,
     init_order_db,
 )
-from database.sqlite import CHECKPOINT_CONNINFO
-
+from database.sqlite import CHECKPOINT_DB_PATH
+from app.services.vectorstore.qdrant import QdrantVectorStore
 from app.agent.multi_agent.master_graph import build_master_agent_graph
 
 logger = logging.getLogger(__name__)
 
-_checkpointer: AsyncPostgresSaver | None = None
-_checkpointer_pool: AsyncConnectionPool | None = None
+_checkpointer: AsyncSqliteSaver | None = None
 _checkpointer_lock = asyncio.Lock()
 _compiled_graphs: dict[str, Any] = {}
 _graph_lock = asyncio.Lock()
 
 
-async def get_checkpointer() -> AsyncPostgresSaver:
-    """Lazy async Postgres checkpointer shared for the process lifetime."""
-    global _checkpointer, _checkpointer_pool
+async def get_checkpointer() -> AsyncSqliteSaver:
+    """Lazy async SQLite checkpointer shared for the process lifetime."""
+    global _checkpointer
     if _checkpointer is not None:
         return _checkpointer
     async with _checkpointer_lock:
         if _checkpointer is None:
-            _checkpointer_pool = AsyncConnectionPool(
-                conninfo=CHECKPOINT_CONNINFO,
-                min_size=1,
-                max_size=10,
-                kwargs={
-                    "autocommit": True,
-                    "prepare_threshold": 0,
-                    "row_factory": dict_row,
-                },
-                open=False,
-            )
-            await _checkpointer_pool.open()
-            saver = AsyncPostgresSaver(conn=_checkpointer_pool)
+            conn = await aiosqlite.connect(CHECKPOINT_DB_PATH, timeout=30)
+            await conn.execute("PRAGMA busy_timeout=30000")
+            saver = AsyncSqliteSaver(conn)
             await saver.setup()
             _checkpointer = saver
     return _checkpointer
@@ -80,7 +65,7 @@ async def get_checkpointer() -> AsyncPostgresSaver:
 @dataclass(slots=True)
 class RAGComponents:
     embedder: EmbeddingService
-    vector_store: ChromaVectorStore
+    vector_store: QdrantVectorStore
 
 
 @lru_cache(maxsize=1)
@@ -132,12 +117,13 @@ def build_components() -> RAGComponents:
         settings.embedding_device,
     )
 
-    vector_store = ChromaVectorStore(
-        persist_directory=settings.chroma_persist_directory,
-        collection_name=settings.collection_name_for(provider.dimension),
+    vector_store = QdrantVectorStore(
+        collection_name=settings.QDRANT_COLLECTION,
         embedding_dimension=provider.dimension,
-        host=settings.chroma_host,
-        port=settings.chroma_port,
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY,
+        sparse_model=settings.QDRANT_SPARSE_MODEL,
+        sparse_cache_dir=settings.models_dir,
     )
 
     return RAGComponents(
@@ -149,7 +135,6 @@ def build_components() -> RAGComponents:
 def build_ingestion_pipeline(source: str) -> IngestionPipeline:
     settings = Settings.from_environment()
     components = build_components()
-    bm25_store = BM25Store(db_path="data/bm25.db")
     return IngestionPipeline(
         loader=DocumentLoaderLibrary(source=source),
         cleaner=DataCleaningLibrary(),
@@ -161,11 +146,10 @@ def build_ingestion_pipeline(source: str) -> IngestionPipeline:
         ),
         embedder=components.embedder,
         vector_store=components.vector_store,
-        bm25_store=bm25_store,
     )
 
 
-def _build_common_rag_graph(retriever, checkpointer: AsyncPostgresSaver):
+def _build_common_rag_graph(retriever, checkpointer: AsyncSqliteSaver):
     """Helper to build a RAG graph with shared components."""
     settings = Settings.from_environment()
     context_builder = ContextBuilder()
@@ -192,21 +176,13 @@ def _build_common_rag_graph(retriever, checkpointer: AsyncPostgresSaver):
 
 
 @lru_cache(maxsize=1)
-def get_hybrid_retriever() -> HybridRetriever:
-    """Singleton getter for the Hybrid Retriever (Dense + BM25)."""
+def get_hybrid_retriever() -> Retriever:
+    """Singleton getter for the Qdrant hybrid retriever (Dense + BM25, RRF in Qdrant)."""
     components = build_components()
 
-    dense_retriever = DenseRetriever(
+    return QdrantHybridRetriever(
         embedder=components.embedder,
         vector_store=components.vector_store,
-    )
-
-    bm25_store = BM25Store(db_path="data/bm25.db")
-    bm25_retriever = BM25Retriever(bm25_store=bm25_store)
-
-    return HybridRetriever(
-        dense_retriever=dense_retriever,
-        bm25_retriever=bm25_retriever,
     )
 
 
@@ -275,7 +251,7 @@ def get_order_repository() -> OrderRepository:
 
 
 def get_tool_registry(
-    retriever: HybridRetriever = Depends(get_hybrid_retriever),
+    retriever: Retriever = Depends(get_hybrid_retriever),
 ) -> ToolRegistry:
     """Dependency provider for the ToolRegistry instance."""
     global _tool_registry_instance
@@ -293,7 +269,7 @@ async def get_master_agent_graph():
     Equipped with:
       - Supervisor-level input & output guardrails
       - Supervisor-level conversational memory checkpointer
-      - Long-term memory extraction & Postgres persistence
+      - Long-term memory extraction & SQLite persistence
       - Specialized sub-agents (RAG, SQL, Web, General)
     """
     if "agent" in _compiled_graphs:

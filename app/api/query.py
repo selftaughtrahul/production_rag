@@ -8,13 +8,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langgraph.checkpoint.postgres import PostgresSaver
 from langchain_core.messages import HumanMessage
-
-from database.sqlite import CHECKPOINT_CONNINFO
 
 from app.api.dependencies import (
     build_wired_output_guardrails,
+    get_checkpointer,
     get_llm,
     get_master_agent_graph,
 )
@@ -348,30 +346,30 @@ async def get_conversation_history(session_id: str,current_user: UserInDB = Depe
 
     config = {"configurable": {"thread_id": session_id}}
 
-    with PostgresSaver.from_conn_string(CHECKPOINT_CONNINFO) as cp:
-        checkpoint = cp.get(config)
+    checkpointer = await get_checkpointer()
+    checkpoint = await checkpointer.aget(config)
 
-        if not checkpoint:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+    if not checkpoint:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-        raw_messages = checkpoint.get("channel_values", {}).get("chat_history", [])
-        if not raw_messages:
-            raw_messages = checkpoint.get("channel_values", {}).get("messages", [])
+    raw_messages = checkpoint.get("channel_values", {}).get("chat_history", [])
+    if not raw_messages:
+        raw_messages = checkpoint.get("channel_values", {}).get("messages", [])
 
-        messages = []
-        for m in raw_messages:
-            if isinstance(m, dict):
-                messages.append(
-                    {
-                        "role": m.get("type", m.get("role", "unknown")),
-                        "content": m.get("content", ""),
-                    }
-                )
-            else:
-                messages.append({"role": m.type, "content": m.content})
+    messages = []
+    for m in raw_messages:
+        if isinstance(m, dict):
+            messages.append(
+                {
+                    "role": m.get("type", m.get("role", "unknown")),
+                    "content": m.get("content", ""),
+                }
+            )
+        else:
+            messages.append({"role": m.type, "content": m.content})
 
-        return {
-            "success": True,
-            "session_id": session_id,
-            "messages": messages,
-        }
+    return {
+        "success": True,
+        "session_id": session_id,
+        "messages": messages,
+    }

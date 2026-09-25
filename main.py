@@ -63,7 +63,7 @@ def _configure_langsmith() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ''' Initialise the Postgres schema and warm retrieval models '''
+    ''' Initialise the SQLite schema and warm retrieval models '''
     init_db()
     _configure_hf_token()
     _configure_langsmith()

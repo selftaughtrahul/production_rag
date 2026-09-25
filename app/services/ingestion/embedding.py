@@ -55,10 +55,15 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
         self.model_name = model
         self.device = device
         local_only = Path(model_path).is_dir()
-        logger.info("Loading embedding model from %s (local_only=%s)", model_path, local_only)
+        truncate_dim = settings.embedding_dimension
+        logger.info(
+            "Loading embedding model from %s (local_only=%s, truncate_dim=%s)",
+            model_path, local_only, truncate_dim,
+        )
         try:
             self.model = SentenceTransformer(
-                model_path, device=device, token=token, local_files_only=local_only
+                model_path, device=device, token=token, local_files_only=local_only,
+                truncate_dim=truncate_dim,
             )
         except (OSError, ValueError) as exc:
             logger.warning(
@@ -67,7 +72,9 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
                 exc,
                 model,
             )
-            self.model = SentenceTransformer(model, device=device, token=token)
+            self.model = SentenceTransformer(
+                model, device=device, token=token, truncate_dim=truncate_dim
+            )
         dimension_getter = getattr(self.model, "get_embedding_dimension", None)
         if dimension_getter is None:
             dimension_getter = self.model.get_sentence_embedding_dimension

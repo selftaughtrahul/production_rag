@@ -11,7 +11,7 @@ class Retriever(ABC):
     """
     Abstract interface for document retrieval.
 
-    All retriever implementations (Dense, BM25, Hybrid) must implement this.
+    All retriever implementations (e.g. QdrantHybridRetriever) must implement this.
     """
 
     @abstractmethod

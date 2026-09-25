@@ -49,7 +49,7 @@ class SupervisorState(TypedDict, total=False):
     # Conversational memory (LangGraph add_messages reducer)
     messages: Annotated[List[BaseMessage], add_messages]
 
-    # Persistent long-term user facts (Postgres user_memories)
+    # Persistent long-term user facts (SQLite user_memories)
     long_term_memories: List[str]
     tool_approved: bool
     pending_order_action: dict[str, Any] | None

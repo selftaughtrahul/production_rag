@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Optional
 
 from database.order_store import OrderRepository
-from app.services.retriever.hybrid import HybridRetriever
+from app.services.retriever.base import Retriever
 from app.tools.base import BaseAgentTool
 from app.tools.doc_search import DocumentSearchTool, ListUserDocumentsTool
 from app.tools.order_tools import (
@@ -81,7 +81,7 @@ class ToolRegistry:
 
 
 def build_default_tool_registry(
-    retriever: HybridRetriever,
+    retriever: Retriever,
     order_repository: OrderRepository,
 ) -> ToolRegistry:
     """Factory creating and populating the standard ToolRegistry."""

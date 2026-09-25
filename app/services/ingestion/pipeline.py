@@ -9,8 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.services.vectorstore.chroma import ChromaVectorStore
-from app.services.retriever.bm25_store import BM25Store
+from app.services.vectorstore.base import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -24,17 +23,15 @@ class IngestionPipeline:
         2. Clean text
         3. Chunk text
         4. Embed chunks
-        5. Upsert to ChromaDB vector store  (always)
-        6. Upsert to BM25 SQLite FTS index  (if bm25_store provided)
+        5. Upsert to the Qdrant vector store (dense + BM25 sparse vectors)
     """
 
-    def __init__(self, loader, cleaner, chunker, embedder, vector_store: ChromaVectorStore, bm25_store: BM25Store | None = None) -> None:
+    def __init__(self, loader, cleaner, chunker, embedder, vector_store: VectorStore) -> None:
         self.loader = loader
         self.cleaner = cleaner
         self.chunker = chunker
         self.embedder = embedder
         self.vector_store = vector_store
-        self.bm25_store = bm25_store
 
     def ingest(self,source: str,document_id: str,filename: str,user_id: str) -> dict[str, Any]:
         """
@@ -71,9 +68,6 @@ class IngestionPipeline:
 
         embedded_chunks = self.embedder.embed_chunks(chunks)
         self.vector_store.add(embedded_chunks)
-
-        if self.bm25_store is not None:
-            self.bm25_store.upsert(embedded_chunks)
 
         logger.info(
             "Ingested document '%s' (id=%s, user=%s, chunks=%d)",

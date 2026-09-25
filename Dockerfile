@@ -14,9 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd --create-home --uid 10001 appuser
 
 COPY --chown=appuser:appuser . .
-RUN mkdir -p documents/temp data/chroma_db logs \
+RUN mkdir -p documents/temp logs \
     && chown -R appuser:appuser /app \
-    && chmod 775 documents documents/temp data data/chroma_db logs
+    && chmod 775 documents documents/temp data logs
 
 USER appuser
 

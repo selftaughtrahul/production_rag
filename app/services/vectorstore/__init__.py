@@ -1,9 +1,10 @@
 from .base import VectorStore
-from .chroma import ChromaVectorStore
 from .models import EmbeddedChunk, SearchResult
+from .qdrant import QdrantVectorStore
 
 __all__ = [
     "EmbeddedChunk",
     "SearchResult",
-    "ChromaVectorStore",
+    "VectorStore",
+    "QdrantVectorStore",
 ]

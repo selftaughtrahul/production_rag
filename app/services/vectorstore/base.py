@@ -11,9 +11,7 @@ class VectorStore(ABC):
     Provider-independent vector store interface.
 
     Implementations:
-        - PGVectorStore
         - QdrantVectorStore
-        - ChromaVectorStore
     """
 
     @abstractmethod

@@ -1,11 +1,18 @@
-"""Postgres engine, ORM session, and schema bootstrap (app state / RDS)."""
+"""SQLite engine, ORM session, and schema bootstrap (users, documents, memories).
+
+The LangGraph checkpointer writes to the same SQLite file, so session
+ownership checks can read its ``checkpoints`` table through SessionLocal.
+"""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Generator
+from pathlib import Path
+from typing import Any
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
@@ -13,39 +20,35 @@ from database.models import Base, Document, MemoryRecord, User
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DATABASE_URL = "postgresql://rag:rag@localhost:5432/rag"
+
+def sqlite_file_path(database_url: str) -> str:
+    """Return the file path of a sqlite:/// URL; refuse anything else."""
+    url = make_url(database_url)
+    if url.get_backend_name() != "sqlite" or not url.database:
+        raise ValueError("DATABASE_URL must be a file-based sqlite:/// URL")
+    return url.database
 
 
-def sqlalchemy_database_url(raw: str) -> str:
-    """SQLAlchemy 2 + psycopg3 DSN from a standard postgresql:// URL."""
-    url = raw.strip()
-    if url.startswith("postgresql+psycopg://"):
-        return url
-    if url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + url.removeprefix("postgresql://")
-    if url.startswith("postgres://"):
-        return "postgresql+psycopg://" + url.removeprefix("postgres://")
-    raise ValueError("DATABASE_URL must be a postgresql connection string")
+DATABASE_URL = Settings.from_environment().database_url
+CHECKPOINT_DB_PATH = sqlite_file_path(DATABASE_URL)
+Path(CHECKPOINT_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 
-
-def checkpoint_conninfo(raw: str) -> str:
-    """LangGraph Postgres checkpointer DSN (libpq postgresql://)."""
-    url = raw.strip()
-    if url.startswith("postgresql+psycopg://"):
-        return "postgresql://" + url.removeprefix("postgresql+psycopg://")
-    if url.startswith("postgres://"):
-        return "postgresql://" + url.removeprefix("postgres://")
-    if url.startswith("postgresql://"):
-        return url
-    raise ValueError("DATABASE_URL must be a postgresql connection string")
-
-
-DATABASE_URL = Settings.from_environment().database_url or _DEFAULT_DATABASE_URL
-CHECKPOINT_CONNINFO = checkpoint_conninfo(DATABASE_URL)
 engine = create_engine(
-    sqlalchemy_database_url(DATABASE_URL),
-    pool_pre_ping=True,
+    DATABASE_URL,
+    connect_args={"check_same_thread": False, "timeout": 30},
 )
+
+
+@event.listens_for(engine, "connect")
+def _configure_sqlite(dbapi_connection: Any, _record: Any) -> None:
+    # WAL lets the API, Celery worker, and checkpointer read while one writes.
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
@@ -80,4 +83,4 @@ def init_db() -> None:
         tables=[User.__table__, Document.__table__, MemoryRecord.__table__],
     )
     _ensure_column("documents", "file_path", "TEXT")
-    logger.info("Postgres schema ready (users, documents, user_memories).")
+    logger.info("SQLite schema ready at %s (users, documents, user_memories).", CHECKPOINT_DB_PATH)

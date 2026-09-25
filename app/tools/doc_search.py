@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from database.models import Document
 from database.sqlite import SessionLocal
-from app.services.retriever.hybrid import HybridRetriever
+from app.services.retriever.base import Retriever
 from app.tools.base import BaseAgentTool
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class DocumentSearchTool(BaseAgentTool):
         "Use this tool when answering questions about internal domain information, user documents, or uploaded files."
     )
     args_schema: Type[BaseModel] = DocumentSearchInput
-    retriever: HybridRetriever
+    retriever: Retriever
 
     class Config:
         arbitrary_types_allowed = True

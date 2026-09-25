@@ -1,7 +1,6 @@
 """Central configuration for the RAG application."""
 
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
@@ -51,16 +50,11 @@ def _env_flag(name: str, default: str = "false") -> bool:
 @dataclass(frozen=True, slots=True)
 class Settings:
     
-    # ── ChromaDB ──────────────────────────────
-    chroma_host: str | None
-    chroma_port: int
-    chroma_persist_directory: str
-    collection_prefix: str
-
     # ── Embedding ─────────────────────────────
     models_dir: str
     embedding_model: str
     embedding_device: str | None
+    embedding_dimension: int | None
 
     # ── Chunking ──────────────────────────────
     reranker_model: str
@@ -92,7 +86,6 @@ class Settings:
 
     # ── Retrieval Top-K ───────────────────────
     dense_top_k: int
-    bm25_top_k: int
     fusion_top_k: int
     rerank_top_k: int
     LOG_DIR:str
@@ -104,23 +97,21 @@ class Settings:
     local_reranker: str | None
     QDRANT_URL: str | None
     QDRANT_API_KEY: str | None
-    QDRANT_COLLECTION: str | None
+    QDRANT_COLLECTION: str
+    QDRANT_SPARSE_MODEL: str
 
 
     @classmethod
     def from_environment(cls) -> "Settings":
         return cls(
-            chroma_host=_optional_env("CHROMA_HOST"),
-            chroma_port=int(os.getenv("CHROMA_PORT", "8000")),
-            chroma_persist_directory=os.getenv(
-                "CHROMA_PERSIST_DIRECTORY", "data/chroma_db"
-            ),
-            collection_prefix=os.getenv("RAG_COLLECTION_PREFIX", "rag"),
             models_dir=os.getenv("MODELS_DIR", r"D:\models"),
             embedding_model=os.getenv(
                 "EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B"
             ),
             embedding_device=_optional_env("EMBEDDING_DEVICE"),
+            embedding_dimension=(
+                int(value) if (value := _optional_env("EMBEDDING_DIMENSION")) else None
+            ),
             reranker_model=os.getenv(
                 "RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"
             ),
@@ -146,7 +137,7 @@ class Settings:
             jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "60")),
             database_url=os.getenv(
                 "DATABASE_URL",
-                "postgresql://rag:rag@localhost:5432/rag",
+                f"sqlite:///{(_PROJECT_ROOT / 'data' / 'app.db').as_posix()}",
             ),
             order_database_url=os.getenv(
                 "ORDER_DATABASE_URL",
@@ -157,7 +148,6 @@ class Settings:
             response_cache_ttl_seconds=int(os.getenv("RESPONSE_CACHE_TTL_SECONDS", "3600")),
             # Top-K retrieval settings
             dense_top_k=int(os.getenv("DENSE_TOP_K", "20")),
-            bm25_top_k=int(os.getenv("BM25_TOP_K", "20")),
             fusion_top_k=int(os.getenv("FUSION_TOP_K", "20")),
             rerank_top_k=int(os.getenv("RERANK_TOP_K", "5")),
             IS_ASYNC=_env_flag("IS_ASYNC", "false"),
@@ -170,14 +160,10 @@ class Settings:
             hf_token=_optional_env("HF_TOKEN") or _optional_env("HUGGING_FACE_HUB_TOKEN"),
             local_embedding=os.getenv("LOCAL_EMBEDDING"),
             local_reranker=os.getenv("LOCAL_RERANKER"),
-            QDRANT_URL = os.getenv("QDRANT_URL"),
-            QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-            QDRANT_COLLECTION = os.getenv(
-                "QDRANT_COLLECTION",
-            ),
-
-
-
+            QDRANT_URL=_optional_env("QDRANT_URL"),
+            QDRANT_API_KEY=_optional_env("QDRANT_API_KEY"),
+            QDRANT_COLLECTION=os.getenv("QDRANT_COLLECTION", "documents"),
+            QDRANT_SPARSE_MODEL=os.getenv("QDRANT_SPARSE_MODEL", "Qdrant/bm25"),
         )
 
     def local_model_path(self, model: str) -> str:
@@ -189,8 +175,4 @@ class Settings:
         if _has_local_model_files(candidate):
             return str(candidate.resolve())
         return model
-
-    def collection_name_for(self, embedding_dimension: int) -> str:
-        model_slug = re.sub(r"[^a-z0-9]+", "_", self.embedding_model.lower()).strip("_")
-        return f"{self.collection_prefix}_{model_slug}_{embedding_dimension}"
 

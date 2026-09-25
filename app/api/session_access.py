@@ -1,4 +1,4 @@
-"""Session ownership checks against the LangGraph Postgres checkpointer."""
+"""Session ownership checks against the LangGraph SQLite checkpointer."""
 
 from __future__ import annotations
 

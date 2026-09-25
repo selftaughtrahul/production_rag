@@ -1,17 +1,15 @@
-"""DATABASE_URL conversion for SQLAlchemy vs LangGraph."""
+"""DATABASE_URL must be a file-based SQLite URL."""
 
-from database.sqlite import checkpoint_conninfo, sqlalchemy_database_url
+import pytest
 
-
-def test_sqlalchemy_url_uses_psycopg_driver() -> None:
-    assert (
-        sqlalchemy_database_url("postgresql://rag:rag@localhost:5432/rag")
-        == "postgresql+psycopg://rag:rag@localhost:5432/rag"
-    )
+from database.sqlite import sqlite_file_path
 
 
-def test_checkpoint_conninfo_is_libpq() -> None:
-    assert (
-        checkpoint_conninfo("postgresql+psycopg://rag:rag@db:5432/rag")
-        == "postgresql://rag:rag@db:5432/rag"
-    )
+def test_sqlite_file_path_from_url() -> None:
+    assert sqlite_file_path("sqlite:///data/app.db") == "data/app.db"
+
+
+@pytest.mark.parametrize("url", ["postgresql://rag:rag@localhost:5432/rag", "sqlite://"])
+def test_sqlite_file_path_rejects_non_file_urls(url: str) -> None:
+    with pytest.raises(ValueError):
+        sqlite_file_path(url)
