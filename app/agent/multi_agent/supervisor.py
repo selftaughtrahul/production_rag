@@ -103,7 +103,7 @@ Determine the next step:"""
         try:
             decision: SupervisorDecision = await self.llm.agenerate_structured(
                 prompt=prompt,
-                system_prompt=SUPERVISOR_ROUTING_V2,
+                system_prompt=SUPERVISOR_ROUTING_V3,
                 response_model=SupervisorDecision,
             )
             logger.info(f"Supervisor routed to [{decision.next}]. Reason: {decision.reasoning}")

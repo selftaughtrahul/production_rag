@@ -192,7 +192,7 @@ class ClaudeService:
                 self.client,
                 model=self.model,
                 max_tokens=max_tokens,
-                temperature=0,
+                # temperature=0,
                 system=system_prompt or "You are a helpful assistant.",
                 messages=messages,
             )
@@ -243,7 +243,7 @@ class ClaudeService:
                 self.client,
                 model=self.model,
                 max_tokens=1024,
-                temperature=0,
+                # temperature=0,
                 system=RAG_GENERATION_SYSTEM_V2,
                 messages=messages,
             )
@@ -306,7 +306,7 @@ class ClaudeService:
             async with self.async_client.messages.stream(
                 model=self.model,
                 max_tokens=1024,
-                temperature=0,
+                # temperature=0,
                 system=RAG_GENERATION_SYSTEM_V2,
                 messages=messages,
                 timeout=_LLM_TIMEOUT_SECONDS,
@@ -360,7 +360,7 @@ Guidelines:
         kwargs = {
             "model": self.model,
             "max_tokens": max_tokens,
-            "temperature": 0,
+            # "temperature": 0,
             "messages": messages,
         }
         if system_prompt:
