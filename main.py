@@ -18,9 +18,11 @@ from app.core.logger import setup_logger
 from app.core.metrics import render_prometheus
 from app.core.rate_limit import attach_rate_limiter
 from database.sqlite import init_db
+import time
 
 setup_logger()
 logger = logging.getLogger(__name__)
+print("start time is ", time.time())
 
 
 def _configure_hf_token() -> None:
@@ -94,4 +96,6 @@ def health() -> dict[str, str]:
 def metrics() -> Response:
     """Prometheus scrape endpoint."""
     return Response(content=render_prometheus(), media_type="text/plain; version=0.0.4")
+
+print("end time is ", time.time())
 
