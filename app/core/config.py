@@ -100,7 +100,11 @@ class Settings:
     enable_nemo: bool
     nemo_config_path: str
     hf_token: str | None
-
+    local_embedding: str | None
+    local_reranker: str | None
+    QDRANT_URL: str | None
+    QDRANT_API_KEY: str | None
+    QDRANT_COLLECTION: str | None
 
 
     @classmethod
@@ -164,6 +168,13 @@ class Settings:
                 str(Path(__file__).resolve().parent.parent / "guardrails" / "nemo_config"),
             ),
             hf_token=_optional_env("HF_TOKEN") or _optional_env("HUGGING_FACE_HUB_TOKEN"),
+            local_embedding=os.getenv("LOCAL_EMBEDDING"),
+            local_reranker=os.getenv("LOCAL_RERANKER"),
+            QDRANT_URL = os.getenv("QDRANT_URL"),
+            QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+            QDRANT_COLLECTION = os.getenv(
+                "QDRANT_COLLECTION",
+            ),
 
 
 
