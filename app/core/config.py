@@ -10,6 +10,17 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(_PROJECT_ROOT / ".env", override=False)
 
 _MIN_JWT_SECRET_LENGTH = 32
+_MODEL_WEIGHT_FILES = (
+    "model.safetensors",
+    "pytorch_model.bin",
+    "model.onnx",
+)
+
+
+def _has_local_model_files(path: Path) -> bool:
+    if not path.is_dir() or not (path / "config.json").is_file():
+        return False
+    return any((path / name).is_file() for name in _MODEL_WEIGHT_FILES)
 
 
 def _optional_env(name: str) -> str | None:
@@ -47,6 +58,7 @@ class Settings:
     collection_prefix: str
 
     # ── Embedding ─────────────────────────────
+    models_dir: str
     embedding_model: str
     embedding_device: str | None
 
@@ -100,12 +112,13 @@ class Settings:
                 "CHROMA_PERSIST_DIRECTORY", "data/chroma_db"
             ),
             collection_prefix=os.getenv("RAG_COLLECTION_PREFIX", "rag"),
+            models_dir=os.getenv("MODELS_DIR", r"D:\models"),
             embedding_model=os.getenv(
-                "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+                "EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B"
             ),
             embedding_device=_optional_env("EMBEDDING_DEVICE"),
             reranker_model=os.getenv(
-                "RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
+                "RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"
             ),
             chunk_size=int(os.getenv("CHUNK_SIZE", "1000")),
             chunk_overlap=int(os.getenv("CHUNK_OVERLAP", "200")),
@@ -155,6 +168,16 @@ class Settings:
 
 
         )
+
+    def local_model_path(self, model: str) -> str:
+        """Prefer a pre-downloaded folder under MODELS_DIR when it exists."""
+        given = Path(model)
+        if _has_local_model_files(given):
+            return str(given.resolve())
+        candidate = Path(self.models_dir) / given.name
+        if _has_local_model_files(candidate):
+            return str(candidate.resolve())
+        return model
 
     def collection_name_for(self, embedding_dimension: int) -> str:
         model_slug = re.sub(r"[^a-z0-9]+", "_", self.embedding_model.lower()).strip("_")
