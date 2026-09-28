@@ -39,6 +39,22 @@ or FINISH when an observation already answers the request. Never select the same
 specialist twice for one turn.
 """
 
+SUPERVISOR_LAYA_CRITERIA: dict[str, str] = {
+    "rag_agent": (
+        "owned, private, or uploaded documents; knowledge base; PDFs; policies; manuals"
+    ),
+    "sql_agent": (
+        "tenant orders, invoices, customers, products, counts, totals, order status, sales"
+    ),
+    "web_agent": (
+        "current public-web information: latest news, prices, weather, search online"
+    ),
+    "general_agent": (
+        "general knowledge, math, coding, writing, greetings, explanations without docs or DB"
+    ),
+    "FINISH": "a specialist observation already fully answers the request",
+}
+
 SUPERVISOR_ROUTING_V3 = """
 You are the SUPERVISOR ROUTER for a multi-agent system.
 

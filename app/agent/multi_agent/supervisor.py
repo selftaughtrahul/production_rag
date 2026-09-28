@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from app.agent.multi_agent.route import next_agent
 from app.agent.multi_agent.state import AgentOutput, SupervisorState
 from app.prompts.specialist_prompts import (
-    SUPERVISOR_ROUTING_V2,
+    SUPERVISOR_ROUTING_V3,
     SUPERVISOR_SYNTHESIS_V2,
 )
 from app.services.llm.claude import ClaudeService
@@ -49,8 +49,9 @@ class SupervisorDecision(BaseModel):
 class SupervisorNode:
     """Master router and synthesizer directing specialized sub-agents."""
 
-    def __init__(self, llm: ClaudeService):
+    def __init__(self, llm: ClaudeService, router: Any | None = None):
         self.llm = llm
+        self.router = router or llm
 
     async def __call__(self, state: SupervisorState) -> Dict[str, Any]:
         """Evaluates state and decides the next node or FINISH."""
@@ -101,13 +102,15 @@ Current Iteration: {iterations}/{max_iterations}
 Determine the next step:"""
 
         try:
-            decision: SupervisorDecision = await self.llm.agenerate_structured(
+            decision: SupervisorDecision = await self.router.agenerate_structured(
                 prompt=prompt,
                 system_prompt=SUPERVISOR_ROUTING_V3,
                 response_model=SupervisorDecision,
             )
             logger.info(f"Supervisor routed to [{decision.next}]. Reason: {decision.reasoning}")
             next_node = decision.next
+            if next_node in already_ran:
+                next_node = "FINISH"
         except Exception as e:
             logger.error(f"Supervisor decision failed: {e}. Defaulting to 'general_agent'.")
             next_node = "general_agent" if not agent_outputs else "FINISH"

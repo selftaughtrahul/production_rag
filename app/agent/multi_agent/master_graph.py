@@ -1,4 +1,6 @@
 import logging
+from typing import Any
+
 from langgraph.graph import StateGraph, START, END
 
 from app.agent.multi_agent.state import SupervisorState
@@ -31,6 +33,7 @@ def build_master_agent_graph(
     input_guardrails: InputGuardrailService | None = None,
     output_guardrails: OutputGuardrailService | None = None,
     checkpointer=None,
+    router: Any | None = None,
 ):
     """
     Builds the Master Multi-Agent Orchestration Graph with Supervisor-level
@@ -44,7 +47,7 @@ def build_master_agent_graph(
     # ─────────────────────────────────────────────────────────────────────────
     input_guardrail_node = InputGuardrailNode(guardrail_service=input_guardrails)
     load_memory_node = LoadMemoryNode()
-    supervisor = SupervisorNode(llm=llm)
+    supervisor = SupervisorNode(llm=llm, router=router)
 
     rag_node = RAGSubGraphNode(
         compiled_rag_graph=compiled_rag_graph,

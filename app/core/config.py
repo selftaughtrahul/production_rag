@@ -22,6 +22,18 @@ def _has_local_model_files(path: Path) -> bool:
     return any((path / name).is_file() for name in _MODEL_WEIGHT_FILES)
 
 
+def _has_laya_checkpoint(path: Path) -> bool:
+    """Laya stores encoder/tokenizer config in subfolders, not a root config.json."""
+    if not path.is_dir():
+        return False
+    return (
+        (path / "model.safetensors").is_file()
+        and (path / "rl_agent_config.json").is_file()
+        and (path / "encoder").is_dir()
+        and (path / "tokenizer").is_dir()
+    )
+
+
 def _optional_env(name: str) -> str | None:
     value = os.getenv(name, "").strip()
     return value or None
@@ -99,6 +111,7 @@ class Settings:
     QDRANT_API_KEY: str | None
     QDRANT_COLLECTION: str
     QDRANT_SPARSE_MODEL: str
+    laya_model: str
 
 
     @classmethod
@@ -164,15 +177,16 @@ class Settings:
             QDRANT_API_KEY=_optional_env("QDRANT_API_KEY"),
             QDRANT_COLLECTION=os.getenv("QDRANT_COLLECTION", "documents"),
             QDRANT_SPARSE_MODEL=os.getenv("QDRANT_SPARSE_MODEL", "Qdrant/bm25"),
+            laya_model=os.getenv("LAYA_MODEL", "laya"),
         )
 
     def local_model_path(self, model: str) -> str:
         """Prefer a pre-downloaded folder under MODELS_DIR when it exists."""
         given = Path(model)
-        if _has_local_model_files(given):
+        if _has_local_model_files(given) or _has_laya_checkpoint(given):
             return str(given.resolve())
         candidate = Path(self.models_dir) / given.name
-        if _has_local_model_files(candidate):
+        if _has_local_model_files(candidate) or _has_laya_checkpoint(candidate):
             return str(candidate.resolve())
         return model
 

@@ -24,6 +24,7 @@ from app.services.ingestion.document_loader import DocumentLoaderLibrary
 from app.services.ingestion.embedding import EmbeddingService, HuggingFaceEmbeddingProvider
 from app.services.ingestion.pipeline import IngestionPipeline
 from app.services.llm.claude import ClaudeService
+from app.services.llm.laya import LayaService
 from app.services.rag.graph import build_rag_graph
 from app.services.retriever.base import Retriever
 from app.services.retriever.context import ContextBuilder
@@ -237,6 +238,24 @@ def get_llm() -> ClaudeService:
     return ClaudeService()
 
 
+@lru_cache(maxsize=1)
+def get_laya() -> LayaService | None:
+    """Load local Laya for supervisor routing when the checkpoint is on disk."""
+    settings = Settings.from_environment()
+    model_path = Path(settings.local_model_path(settings.laya_model))
+    if not model_path.is_dir():
+        logger.warning(
+            "Laya checkpoint not found at %s; supervisor routing uses Claude",
+            model_path,
+        )
+        return None
+    try:
+        return LayaService(model=settings.laya_model)
+    except Exception as exc:
+        logger.warning("Laya failed to load (%s); supervisor routing uses Claude", exc)
+        return None
+
+
 _tool_registry_instance: Optional[ToolRegistry] = None
 
 
@@ -284,6 +303,7 @@ async def get_master_agent_graph():
             tool_registry = get_tool_registry(retriever=retriever)
             _compiled_graphs["agent"] = build_master_agent_graph(
                 llm=llm,
+                router=get_laya(),
                 tool_registry=tool_registry,
                 compiled_rag_graph=compiled_rag,
                 input_guardrails=build_input_guardrails(
