@@ -84,6 +84,16 @@ class APIClient:
             return response.json().get("sessions", [])
         return []
 
+    def delete_conversation(self, session_id: str) -> tuple[bool, str]:
+        response = requests.delete(
+            f"{BASE_URL}/chat/conversations/{session_id}",
+            headers=self.get_headers(),
+        )
+        self._check_auth(response)
+        if response.status_code == 200:
+            return True, ""
+        return False, response.text
+
     def get_conversation(self, session_id):
         response = requests.get(f"{BASE_URL}/chat/conversations/{session_id}", headers=self.get_headers())
         self._check_auth(response)

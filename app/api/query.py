@@ -16,7 +16,11 @@ from app.api.dependencies import (
     get_llm,
     get_master_agent_graph,
 )
-from app.api.session_access import ensure_session_owner, list_owned_conversations
+from app.api.session_access import (
+    ensure_session_owner,
+    list_owned_conversations,
+    thread_owner,
+)
 from app.core.audit import audit_event
 from app.core.exceptions import LLMUnavailableError
 from app.core.langfuse_tracer import trace_chat
@@ -355,6 +359,23 @@ async def list_conversations(current_user: UserInDB = Depends(get_current_user))
 
     conversations = list_owned_conversations(current_user.id)
     return {"success": True, "sessions": conversations}
+
+
+@router.delete("/conversations/{session_id}", summary="Delete a conversation thread")
+async def delete_conversation(
+    session_id: str,
+    current_user: UserInDB = Depends(get_current_user),
+):
+    """Remove one owned chat thread and its nested RAG checkpoint."""
+    if not session_id.startswith("session_") or ":" in session_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if thread_owner(session_id) != current_user.id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    checkpointer = await get_checkpointer()
+    await checkpointer.adelete_thread(session_id)
+    await checkpointer.adelete_thread(f"{session_id}:rag")
+    return {"success": True, "session_id": session_id}
 
 
 @router.get("/conversations/{session_id}", summary="Get conversation chat history")

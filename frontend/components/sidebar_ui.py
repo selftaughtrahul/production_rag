@@ -25,19 +25,35 @@ def render_sidebar(api_client):
 
         for conversation in sessions:
             session_id = conversation["session_id"]
-            first_message = conversation.get("first_message") or "New conversation"
+            raw_message = (conversation.get("first_message") or "").strip()
+            label = raw_message or "New conversation"
+            if len(label) > 40:
+                label = label[:40] + "..."
 
-            if len(first_message) > 45:
-                first_message = first_message[:45] + "..."
-
-            if st.button(
-                first_message,
-                key=f"session_{session_id}",
-                use_container_width=True,
-            ):
-                st.session_state.current_session_id = session_id
-                st.session_state.messages = api_client.get_conversation(session_id)
-                st.rerun()
+            title_col, delete_col = st.columns([5, 1], vertical_alignment="center")
+            with title_col:
+                if st.button(
+                    label,
+                    key=f"session_{session_id}",
+                    use_container_width=True,
+                ):
+                    st.session_state.current_session_id = session_id
+                    st.session_state.messages = api_client.get_conversation(session_id)
+                    st.rerun()
+            if raw_message:
+                with delete_col:
+                    if st.button(
+                        "✕",
+                        key=f"delete_{session_id}",
+                        help="Delete this conversation",
+                    ):
+                        deleted, error = api_client.delete_conversation(session_id)
+                        if deleted:
+                            if st.session_state.current_session_id == session_id:
+                                st.session_state.current_session_id = None
+                                st.session_state.messages = []
+                            st.rerun()
+                        st.error(error or "Could not delete this conversation")
 
         st.divider()
         if st.button("Logout"):
