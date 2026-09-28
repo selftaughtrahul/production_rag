@@ -52,6 +52,19 @@ class InputGuardrailNode:
         return update
 
 
+class ShortTermCompressionNode:
+    """Ask Laya whether to compress checkpoint messages, then summarize with Claude."""
+
+    def __init__(self, llm: ClaudeService, router: Any | None = None) -> None:
+        self.llm = llm
+        self.router = router
+
+    async def __call__(self, state: SupervisorState) -> dict[str, Any]:
+        from app.memory.short_term import manage_short_term_memory
+
+        return await manage_short_term_memory(state, llm=self.llm, router=self.router)
+
+
 class LoadMemoryNode:
     """Load tenant-scoped long-term facts into supervisor state."""
 

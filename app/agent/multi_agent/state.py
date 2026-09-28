@@ -51,6 +51,12 @@ class SupervisorState(TypedDict, total=False):
 
     # Persistent long-term user facts (SQLite user_memories)
     long_term_memories: List[str]
+
+    # Short-term checkpoint compression bookkeeping
+    memory_summary: str
+    memory_version: int
+    last_compressed_message_index: int
+    compression_count: int
     tool_approved: bool
     pending_order_action: dict[str, Any] | None
 

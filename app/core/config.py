@@ -112,6 +112,11 @@ class Settings:
     QDRANT_COLLECTION: str
     QDRANT_SPARSE_MODEL: str
     laya_model: str
+    laya_model_path: str
+    memory_compression_enabled: bool
+    memory_compression_threshold: int
+    memory_hard_limit: int
+    keep_recent_messages: int
 
 
     @classmethod
@@ -178,6 +183,11 @@ class Settings:
             QDRANT_COLLECTION=os.getenv("QDRANT_COLLECTION", "documents"),
             QDRANT_SPARSE_MODEL=os.getenv("QDRANT_SPARSE_MODEL", "Qdrant/bm25"),
             laya_model=os.getenv("LAYA_MODEL", "laya"),
+            laya_model_path=os.getenv("LAYA_MODEL_PATH", r"D:\models\laya"),
+            memory_compression_enabled=_env_flag("MEMORY_COMPRESSION_ENABLED", "true"),
+            memory_compression_threshold=int(os.getenv("MEMORY_COMPRESSION_THRESHOLD", "16000")),
+            memory_hard_limit=int(os.getenv("MEMORY_HARD_LIMIT", "20000")),
+            keep_recent_messages=int(os.getenv("KEEP_RECENT_MESSAGES", "6")),
         )
 
     def local_model_path(self, model: str) -> str:

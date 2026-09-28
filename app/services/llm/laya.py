@@ -87,7 +87,7 @@ class LayaService:
         import laya
 
         settings = Settings.from_environment()
-        model = self.model or settings.laya_model
+        model = self.model or settings.laya_model_path or settings.laya_model
         model_path = settings.local_model_path(model)
         device = resolve_torch_device(self.device or settings.embedding_device)
         logger.info("Loading Laya checkpoint from %s on %s", model_path, device)

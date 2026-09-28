@@ -11,6 +11,7 @@ from app.agent.multi_agent.nodes import (
     OutputGuardrailNode,
     SaveMemoryNode,
     ErrorHandlerNode,
+    ShortTermCompressionNode,
 )
 from app.agent.multi_agent.specialists import (
     GeneralLLMNode,
@@ -47,6 +48,7 @@ def build_master_agent_graph(
     # ─────────────────────────────────────────────────────────────────────────
     input_guardrail_node = InputGuardrailNode(guardrail_service=input_guardrails)
     load_memory_node = LoadMemoryNode()
+    compress_memory_node = ShortTermCompressionNode(llm=llm, router=router)
     supervisor = SupervisorNode(llm=llm, router=router)
 
     rag_node = RAGSubGraphNode(
@@ -66,6 +68,7 @@ def build_master_agent_graph(
     # ─────────────────────────────────────────────────────────────────────────
     master_graph.add_node("validate_input", input_guardrail_node)
     master_graph.add_node("load_memory", load_memory_node)
+    master_graph.add_node("compress_memory", compress_memory_node)
     master_graph.add_node("supervisor", supervisor)
 
     master_graph.add_node("rag_agent", rag_node)
@@ -100,8 +103,8 @@ def build_master_agent_graph(
         },
     )
 
-    # load_memory -> supervisor
-    master_graph.add_edge("load_memory", "supervisor")
+    master_graph.add_edge("load_memory", "compress_memory")
+    master_graph.add_edge("compress_memory", "supervisor")
 
     # Conditional routing from Supervisor to specialists or synthesis
     def decide_from_supervisor(state: SupervisorState) -> str:
