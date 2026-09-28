@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import ormsgpack
 from fastapi import HTTPException
 from sqlalchemy import MetaData, Table, inspect, select
 from sqlalchemy.exc import OperationalError
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from database.sqlite import SessionLocal
 
 _checkpoints: Table | None = None
+_writes: Table | None = None
 
 
 def _checkpoints_table(session: Session) -> Table | None:
@@ -23,6 +25,37 @@ def _checkpoints_table(session: Session) -> Table | None:
     if _checkpoints is None:
         _checkpoints = Table("checkpoints", MetaData(), autoload_with=bind)
     return _checkpoints
+
+
+def _writes_table(session: Session) -> Table | None:
+    """Reflect LangGraph's writes table (channel values per checkpoint)."""
+    global _writes
+    bind = session.get_bind()
+    if not inspect(bind).has_table("writes"):
+        return None
+    if _writes is None:
+        _writes = Table("writes", MetaData(), autoload_with=bind)
+    return _writes
+
+
+def _decode_msgpack_str(blob: object) -> str | None:
+    """Decode a checkpointer msgpack blob that stores a plain string."""
+    if isinstance(blob, memoryview):
+        blob = blob.tobytes()
+    if not isinstance(blob, (bytes, bytearray)) or not blob:
+        return None
+    try:
+        value = ormsgpack.unpackb(bytes(blob))
+    except (TypeError, ValueError):
+        return None
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _is_user_facing_thread(thread_id: str) -> bool:
+    """Nested RAG checkpoints use ``{session_id}:rag`` and are not chat sessions."""
+    return bool(thread_id) and ":" not in thread_id
 
 
 def thread_owner(session_id: str) -> str | None:
@@ -98,6 +131,27 @@ def list_owned_thread_ids(user_id: str) -> list[str]:
         session.close()
 
         
+def _first_query_by_thread(session: Session, thread_ids: list[str]) -> dict[str, str]:
+    """Map thread_id -> first supervisor ``query`` write (the user's first message)."""
+    table = _writes_table(session)
+    if table is None or not thread_ids:
+        return {}
+    rows = session.execute(
+        select(table.c.thread_id, table.c.value)
+        .where(table.c.thread_id.in_(thread_ids))
+        .where(table.c.channel == "query")
+        .order_by(table.c.checkpoint_id.asc())
+    ).all()
+    first: dict[str, str] = {}
+    for thread_id, blob in rows:
+        if thread_id in first:
+            continue
+        text_value = _decode_msgpack_str(blob)
+        if text_value:
+            first[thread_id] = text_value
+    return first
+
+
 def list_owned_conversations(user_id: str) -> list[dict]:
     """Return checkpoint conversations owned by the given user."""
     session = SessionLocal()
@@ -115,9 +169,11 @@ def list_owned_conversations(user_id: str) -> list[dict]:
             )
         ).all()
 
-        conversations = {}
+        conversations: dict[str, dict] = {}
 
         for thread_id, metadata in rows:
+            if not _is_user_facing_thread(thread_id):
+                continue
             if _owner_from_metadata(metadata) != user_id:
                 continue
 
@@ -129,20 +185,9 @@ def list_owned_conversations(user_id: str) -> list[dict]:
                 },
             )
 
-        # Use your existing conversation function
-        for conversation in conversations.values():
-            session_id = conversation["session_id"]
-
-            try:
-                messages = get_conversation(session_id)
-
-                for message in messages:
-                    if message.get("role") in {"user", "human"}:
-                        conversation["first_message"] = message.get("content", "")
-                        break
-
-            except Exception:
-                conversation["first_message"] = None
+        first_queries = _first_query_by_thread(session, list(conversations.keys()))
+        for thread_id, conversation in conversations.items():
+            conversation["first_message"] = first_queries.get(thread_id)
 
         return list(conversations.values())
 

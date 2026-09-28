@@ -373,6 +373,7 @@ Guidelines:
         _log_usage(response)
         return response.content[0].text.strip()
 
+    @traceable(name="Claude Route", run_type="chain")
     async def agenerate_structured(
         self,
         prompt: str,

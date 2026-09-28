@@ -5,6 +5,8 @@ import logging
 import os
 from typing import Any
 
+from langsmith import traceable
+
 from app.core.config import Settings
 from app.core.device import resolve_torch_device
 from app.prompts.specialist_prompts import SUPERVISOR_LAYA_CRITERIA, SUPERVISOR_ROUTING_V2
@@ -94,6 +96,11 @@ class LayaService:
     def predict(self, state: str | dict[str, Any], questions: dict[str, Any]) -> dict[str, Any]:
         return self._agent.predict(state, questions)
 
+    @traceable(
+        name="Laya Route",
+        run_type="llm",
+        metadata={"ls_provider": "laya", "ls_model_name": "laya"},
+    )
     async def agenerate_structured(
         self,
         prompt: str,

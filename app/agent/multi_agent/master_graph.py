@@ -69,7 +69,7 @@ def build_master_agent_graph(
     master_graph.add_node("supervisor", supervisor)
 
     master_graph.add_node("rag_agent", rag_node)
-    master_graph.add_node("sql_agent", sql_node)
+    # master_graph.add_node("sql_agent", sql_node)
     master_graph.add_node("web_agent", web_node)
     master_graph.add_node("general_agent", general_node)
 
@@ -106,7 +106,7 @@ def build_master_agent_graph(
     # Conditional routing from Supervisor to specialists or synthesis
     def decide_from_supervisor(state: SupervisorState) -> str:
         next_step = state.get("next_node", "FINISH")
-        if next_step in ["rag_agent", "sql_agent", "web_agent", "general_agent", "FINISH"]:
+        if next_step in ["rag_agent", "web_agent", "general_agent", "FINISH"]:
             return next_step
         return "FINISH"
 
@@ -115,7 +115,6 @@ def build_master_agent_graph(
         decide_from_supervisor,
         {
             "rag_agent": "rag_agent",
-            "sql_agent": "sql_agent",
             "web_agent": "web_agent",
             "general_agent": "general_agent",
             "FINISH": "synthesize",
@@ -124,7 +123,6 @@ def build_master_agent_graph(
 
     # Specialist agents all cycle observations back to supervisor
     master_graph.add_edge("rag_agent", "supervisor")
-    master_graph.add_edge("sql_agent", "supervisor")
     master_graph.add_edge("web_agent", "supervisor")
     master_graph.add_edge("general_agent", "supervisor")
 

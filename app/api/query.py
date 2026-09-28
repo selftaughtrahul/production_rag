@@ -40,15 +40,30 @@ def generate_new_session_id() -> str:
     return f"session_{uuid.uuid4()}"
 
 
-def _build_graph_config(thread_id: str, user_id: str) -> dict[str, Any]:
+def _chat_run_name(question: str | None) -> str:
+    """LangSmith lists a run by name, so the name is the user question."""
+    label = " ".join((question or "").split())
+    if not label:
+        return "chat"
+    if len(label) > 120:
+        return label[:117] + "..."
+    return label
+
+
+def _build_graph_config(
+    thread_id: str,
+    user_id: str,
+    question: str | None = None,
+) -> dict[str, Any]:
     return {
         "configurable": {"thread_id": thread_id},
-        "run_name": f"chat",
+        "run_name": _chat_run_name(question),
         "tags": ["chat"],
         "metadata": {
             "source": "fastapi",
             "user_id": user_id,
             "session_id": thread_id,
+            "thread_id": thread_id,
         },
     }
 
@@ -68,7 +83,7 @@ async def _run_agent(master_graph: Any, question: str, user_id: str, thread_id: 
                 "iterations": 0,
                 "max_iterations": 2,
             },
-            config=_build_graph_config(thread_id, user_id),
+            config=_build_graph_config(thread_id, user_id, question),
         )
     trajectory = [
         {

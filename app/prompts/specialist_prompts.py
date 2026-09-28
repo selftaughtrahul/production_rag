@@ -43,9 +43,9 @@ SUPERVISOR_LAYA_CRITERIA: dict[str, str] = {
     "rag_agent": (
         "owned, private, or uploaded documents; knowledge base; PDFs; policies; manuals"
     ),
-    "sql_agent": (
-        "tenant orders, invoices, customers, products, counts, totals, order status, sales"
-    ),
+    # "sql_agent": (
+    #     "tenant orders, invoices, customers, products, counts, totals, order status, sales"
+    # ),
     "web_agent": (
         "current public-web information: latest news, prices, weather, search online"
     ),
