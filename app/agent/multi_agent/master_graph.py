@@ -16,7 +16,6 @@ from app.agent.multi_agent.nodes import (
 from app.agent.multi_agent.specialists import (
     GeneralLLMNode,
     RAGSubGraphNode,
-    SQLSubGraphNode,
     WebAgentNode,
 )
 from app.guardrails.input_service import InputGuardrailService
@@ -55,7 +54,6 @@ def build_master_agent_graph(
         compiled_rag_graph=compiled_rag_graph,
         tool_registry=tool_registry,
     )
-    sql_node = SQLSubGraphNode(llm=llm, tool_registry=tool_registry)
     web_node = WebAgentNode(llm=llm, tool_registry=tool_registry)
     general_node = GeneralLLMNode(llm=llm, tool_registry=tool_registry)
 
@@ -72,7 +70,6 @@ def build_master_agent_graph(
     master_graph.add_node("supervisor", supervisor)
 
     master_graph.add_node("rag_agent", rag_node)
-    # master_graph.add_node("sql_agent", sql_node)
     master_graph.add_node("web_agent", web_node)
     master_graph.add_node("general_agent", general_node)
 

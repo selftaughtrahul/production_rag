@@ -126,11 +126,6 @@ class SaveMemoryNode:
         self.llm = llm
 
     async def __call__(self, state: SupervisorState) -> dict[str, Any]:
-        if state.get("pending_order_action") or any(
-            output.metadata.get("operational")
-            for output in state.get("agent_outputs", [])
-        ):
-            return {}
         persist_from_turn_background(
             self.llm,
             state.get("user_id"),

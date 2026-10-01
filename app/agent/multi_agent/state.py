@@ -1,5 +1,4 @@
-from datetime import datetime
-from typing import Annotated, Any, Dict, List, Literal, Optional, TypedDict
+from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
@@ -11,21 +10,6 @@ class AgentOutput(BaseModel):
     agent_name: str
     result: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class PendingOrderAction(BaseModel):
-    """Checkpoint-safe order draft bound to one user and session."""
-
-    action_id: str
-    user_id: str
-    session_id: str
-    tool_name: Literal["create_order", "update_order"]
-    payload: dict[str, Any] = Field(default_factory=dict)
-    missing_fields: list[str] = Field(default_factory=list)
-    phase: Literal["collecting", "awaiting_confirmation"]
-    expires_at: datetime
-    idempotency_key: str
-    payload_hash: str | None = None
 
 
 def merge_agent_outputs(
@@ -58,9 +42,8 @@ class SupervisorState(TypedDict, total=False):
     last_compressed_message_index: int
     compression_count: int
     tool_approved: bool
-    pending_order_action: dict[str, Any] | None
 
-    # Next node to dispatch: 'rag_agent', 'sql_agent', 'web_agent', 'general_agent', 'FINISH'
+    # Next node to dispatch: 'rag_agent', 'web_agent', 'general_agent', 'FINISH'
     next_node: str
 
     # Trajectory of sub-agent outputs

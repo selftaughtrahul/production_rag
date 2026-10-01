@@ -15,7 +15,6 @@ def test_supervisor_schema_maps_to_laya_choice_question() -> None:
     assert questions["next"]["type"] == "choice"
     assert set(questions["next"]["criteria"]) == {
         "rag_agent",
-        "sql_agent",
         "web_agent",
         "general_agent",
         "FINISH",
@@ -28,7 +27,7 @@ def test_laya_structured_route_uses_choice_not_text() -> None:
         "answers": {
             "next": {
                 "type": "choice",
-                "choice": "sql_agent",
+                "choice": "web_agent",
                 "confidence": 0.91,
             }
         }
@@ -36,11 +35,11 @@ def test_laya_structured_route_uses_choice_not_text() -> None:
     service = LayaService(agent=agent)
     decision = asyncio.run(
         service.agenerate_structured(
-            prompt="User Query: show my orders",
+            prompt="User Query: latest news on TSLA",
             system_prompt="route",
             response_model=SupervisorDecision,
         )
     )
-    assert decision.next == "sql_agent"
-    assert "sql_agent" in decision.reasoning
+    assert decision.next == "web_agent"
+    assert "web_agent" in decision.reasoning
     agent.predict.assert_called_once()

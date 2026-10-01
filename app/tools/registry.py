@@ -1,17 +1,9 @@
 import logging
 from typing import Dict, List, Optional
 
-from database.order_store import OrderRepository
 from app.services.retriever.base import Retriever
 from app.tools.base import BaseAgentTool
 from app.tools.doc_search import DocumentSearchTool, ListUserDocumentsTool
-from app.tools.order_tools import (
-    CreateOrderTool,
-    GetOrderTool,
-    ListOrdersTool,
-    OrderAnalyticsTool,
-    UpdateOrderTool,
-)
 from app.tools.utility_tools import CalculatorTool, CurrentDateTimeTool
 from app.tools.web_read import WebPageReadTool
 from app.tools.web_search import WebSearchTool
@@ -20,13 +12,6 @@ logger = logging.getLogger(__name__)
 
 AGENT_TOOL_NAMES: dict[str, tuple[str, ...]] = {
     "rag_agent": ("document_search", "list_user_documents"),
-    "sql_agent": (
-        "get_order",
-        "list_orders",
-        "order_analytics",
-        "create_order",
-        "update_order",
-    ),
     "web_agent": ("web_search", "read_web_page"),
     "general_agent": ("calculate", "current_datetime"),
 }
@@ -80,10 +65,7 @@ class ToolRegistry:
         return self._tools.get(tool_name)
 
 
-def build_default_tool_registry(
-    retriever: Retriever,
-    order_repository: OrderRepository,
-) -> ToolRegistry:
+def build_default_tool_registry(retriever: Retriever) -> ToolRegistry:
     """Factory creating and populating the standard ToolRegistry."""
     registry = ToolRegistry()
 
@@ -99,10 +81,5 @@ def build_default_tool_registry(
     registry.register_tool(WebPageReadTool())
     registry.register_tool(CalculatorTool())
     registry.register_tool(CurrentDateTimeTool())
-    registry.register_tool(GetOrderTool(repository=order_repository))
-    registry.register_tool(ListOrdersTool(repository=order_repository))
-    registry.register_tool(OrderAnalyticsTool(repository=order_repository))
-    registry.register_tool(CreateOrderTool(repository=order_repository))
-    registry.register_tool(UpdateOrderTool(repository=order_repository))
 
     return registry

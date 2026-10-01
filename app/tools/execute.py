@@ -10,11 +10,6 @@ _TENANT_SCOPED_TOOLS = frozenset(
     {
         "document_search",
         "list_user_documents",
-        "get_order",
-        "list_orders",
-        "order_analytics",
-        "create_order",
-        "update_order",
     }
 )
 

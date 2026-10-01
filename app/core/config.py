@@ -91,7 +91,6 @@ class Settings:
     jwt_algorithm: str
     jwt_expire_minutes: int
     database_url: str
-    order_database_url: str
     rate_limit_default: str
     rate_limit_chat: str
     response_cache_ttl_seconds: int
@@ -156,10 +155,6 @@ class Settings:
             database_url=os.getenv(
                 "DATABASE_URL",
                 f"sqlite:///{(_PROJECT_ROOT / 'data' / 'app.db').as_posix()}",
-            ),
-            order_database_url=os.getenv(
-                "ORDER_DATABASE_URL",
-                f"sqlite:///{(_PROJECT_ROOT / 'data' / 'orders_demo.db').as_posix()}",
             ),
             rate_limit_default=os.getenv("RATE_LIMIT_DEFAULT", "60/minute"),
             rate_limit_chat=os.getenv("RATE_LIMIT_CHAT", "10/minute"),

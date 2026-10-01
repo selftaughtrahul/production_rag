@@ -31,11 +31,6 @@ from app.services.retriever.context import ContextBuilder
 from app.services.retriever.qdrant_retreiver import QdrantHybridRetriever
 from app.services.retriever.reranker import CrossEncoderReranker
 from app.tools.registry import ToolRegistry, build_default_tool_registry
-from database.order_store import (
-    OrderRepository,
-    create_order_engine,
-    init_order_db,
-)
 from database.sqlite import CHECKPOINT_DB_PATH
 from app.services.vectorstore.qdrant import QdrantVectorStore
 from app.agent.multi_agent.master_graph import build_master_agent_graph
@@ -259,26 +254,13 @@ def get_laya() -> LayaService | None:
 _tool_registry_instance: Optional[ToolRegistry] = None
 
 
-@lru_cache(maxsize=1)
-def get_order_repository() -> OrderRepository:
-    """Return the isolated order repository, initialized once per process."""
-    order_engine = create_order_engine(
-        Settings.from_environment().order_database_url
-    )
-    init_order_db(order_engine)
-    return OrderRepository(order_engine)
-
-
 def get_tool_registry(
     retriever: Retriever = Depends(get_hybrid_retriever),
 ) -> ToolRegistry:
     """Dependency provider for the ToolRegistry instance."""
     global _tool_registry_instance
     if _tool_registry_instance is None:
-        _tool_registry_instance = build_default_tool_registry(
-            retriever=retriever,
-            order_repository=get_order_repository(),
-        )
+        _tool_registry_instance = build_default_tool_registry(retriever=retriever)
     return _tool_registry_instance
 
 
@@ -289,7 +271,7 @@ async def get_master_agent_graph():
       - Supervisor-level input & output guardrails
       - Supervisor-level conversational memory checkpointer
       - Long-term memory extraction & SQLite persistence
-      - Specialized sub-agents (RAG, SQL, Web, General)
+      - Specialized sub-agents (RAG, Web, General)
     """
     if "agent" in _compiled_graphs:
         return _compiled_graphs["agent"]

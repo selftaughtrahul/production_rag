@@ -5,8 +5,6 @@ __all__ = [
     "ToolResult",
     "DocumentSearchTool",
     "WebSearchTool",
-    "SQLQueryTool",
-    "SQLSchemaTool",
     "ToolRegistry",
     "build_default_tool_registry",
 ]
