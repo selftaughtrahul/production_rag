@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from pathlib import Path
 
 from langchain_openai import OpenAIEmbeddings
@@ -83,7 +84,36 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
             raise RuntimeError(f"Could not determine embedding dimension for {model}")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [] if not texts else self.model.encode(texts, convert_to_numpy=True).tolist()
+        if not texts:
+            return []
+        try:
+            return self._encode(texts, batch_size=4)
+        except RuntimeError as exc:
+            if "out of memory" not in str(exc).lower():
+                raise
+            logger.warning(
+                "GPU out of memory while embedding %d chunks; continuing on CPU",
+                len(texts),
+            )
+            self._move_to_cpu()
+            return self._encode(texts, batch_size=4)
+
+    def _encode(self, texts: list[str], *, batch_size: int) -> list[list[float]]:
+        vectors = self.model.encode(
+            texts,
+            batch_size=batch_size,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
+        return vectors.tolist()
+
+    def _move_to_cpu(self) -> None:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        self.model.to("cpu")
+        self.device = "cpu"
 
     def embed_query(self, query: str) -> list[float]:
         return self.model.encode([query], convert_to_numpy=True)[0].tolist()
@@ -96,16 +126,29 @@ class EmbeddingService:
     def __init__(self, provider: EmbeddingProvider):
         self.provider = provider
 
-    def embed_chunks(self, chunks: list[Chunk]) -> list[EmbeddedChunk]:
-        if not chunks:
-            return []
-        embeddings = self.provider.embed_documents([chunk.text for chunk in chunks])
-        if len(embeddings) != len(chunks):
-            raise RuntimeError("Embedding count does not match chunk count")
-        return [EmbeddedChunk(
-            chunk_id=self._chunk_id(chunk), text=chunk.text, embedding=embedding,
-            metadata=chunk.metadata.copy(),
-        ) for chunk, embedding in zip(chunks, embeddings, strict=True)]
+    def embed_chunks(
+        self,
+        chunks: list[Chunk],
+        *,
+        batch_size: int = 4,
+    ) -> Iterator[list[EmbeddedChunk]]:
+        """Yield one embedded batch at a time so a large file is not held in memory."""
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
+        for start in range(0, len(chunks), batch_size):
+            batch = chunks[start:start + batch_size]
+            embeddings = self.provider.embed_documents([chunk.text for chunk in batch])
+            if len(embeddings) != len(batch):
+                raise RuntimeError("Embedding count does not match chunk count")
+            yield [
+                EmbeddedChunk(
+                    chunk_id=self._chunk_id(chunk),
+                    text=chunk.text,
+                    embedding=embedding,
+                    metadata=chunk.metadata.copy(),
+                )
+                for chunk, embedding in zip(batch, embeddings, strict=True)
+            ]
 
     def embed_query(self, query: str) -> list[float]:
         if not isinstance(query, str):

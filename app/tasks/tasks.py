@@ -1,9 +1,10 @@
-from app.tasks.celery_app import celery_app
+from app.tasks.celery_app import _ensure_project_root, celery_app
 
 
 @celery_app.task(name="app.tasks.ingest_document_task")
 def ingest_document_task(source: str, document_id: str, filename: str, user_id: str) -> dict:
     """Celery background task to ingest a document with tenant metadata."""
+    _ensure_project_root()
     from app.api.dependencies import build_ingestion_pipeline
     from database.models import Document
     from database.sqlite import SessionLocal
@@ -26,9 +27,9 @@ def ingest_document_task(source: str, document_id: str, filename: str, user_id: 
             )
         )
         session.commit()
-    except Exception:
+    except Exception as e:
         session.rollback()
-        raise
+        raise e
     finally:
         session.close()
 

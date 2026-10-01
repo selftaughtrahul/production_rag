@@ -66,8 +66,12 @@ class IngestionPipeline:
             chunk.metadata["chunk_index"] = index
             chunk.metadata["chunk_id"] = f"{document_id}_chunk_{index}"
 
-        embedded_chunks = self.embedder.embed_chunks(chunks)
-        self.vector_store.add(embedded_chunks)
+        stored = 0
+        for batch in self.embedder.embed_chunks(chunks):
+            self.vector_store.add(batch)
+            stored += len(batch)
+        if stored != len(chunks):
+            raise RuntimeError("Stored chunk count does not match the document")
 
         logger.info(
             "Ingested document '%s' (id=%s, user=%s, chunks=%d)",
