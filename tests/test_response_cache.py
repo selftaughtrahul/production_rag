@@ -17,3 +17,7 @@ def test_cache_key_normalizes_question() -> None:
 def test_cache_key_changes_with_question() -> None:
     assert cache_key("u1", "alpha") != cache_key("u1", "beta")
 
+
+def test_cache_key_uses_current_version() -> None:
+    assert cache_key("u1", "hello").startswith("rag:answer:2:")
+

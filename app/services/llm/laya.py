@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import warnings
 from typing import Any
 
 from langsmith import traceable
@@ -91,7 +92,15 @@ class LayaService:
         model_path = settings.local_model_path(model)
         device = resolve_torch_device(self.device or settings.embedding_device)
         logger.info("Loading Laya checkpoint from %s on %s", model_path, device)
-        return laya.load(model_path, device=device)
+        # This checkpoint stores a temperature outside the loader's range.
+        # Laya already clamps it; the warning does not change the route.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"laya: this checkpoint ships invalid temperatures.*",
+                category=RuntimeWarning,
+            )
+            return laya.load(model_path, device=device)
 
     def predict(self, state: str | dict[str, Any], questions: dict[str, Any]) -> dict[str, Any]:
         return self._agent.predict(state, questions)

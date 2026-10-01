@@ -104,6 +104,7 @@ async def _run_agent(master_graph: Any, question: str, user_id: str, thread_id: 
         "guardrail_metadata": result.get("guardrail_metadata", {}),
         "long_term_memories": result.get("long_term_memories") or [],
         "direct_response": direct_response,
+        "input_guardrail_passed": result.get("input_guardrail_passed", True),
     }
 
 
@@ -147,8 +148,8 @@ async def chat(
         yield ": keepalive\n\n"
 
         try:
-            master_graph = await get_master_agent_graph()
-            # Redis response cache: key = user_id + query hash
+            # Redis response cache: key = user_id + query hash.
+            # Check before the graph so a hit does not load models.
             cached_answer = get_cached_answer(user_id, question)
             if cached_answer:
                 logger.info("response_cache hit user_id=%s", user_id)
@@ -178,6 +179,7 @@ async def chat(
                 )
                 return
 
+            master_graph = await get_master_agent_graph()
             agent_result = await _run_agent(master_graph, question, user_id, thread_id)
             context = _context_from_agent(agent_result)
             llm = get_llm()
@@ -235,7 +237,8 @@ async def chat(
             for token in pieces or [full_answer]:
                 yield _sse({"type": "token", "content": token})
 
-            set_cached_answer(user_id, question, full_answer)
+            if agent_result.get("input_guardrail_passed", True):
+                set_cached_answer(user_id, question, full_answer)
             inc_chat("ok")
             audit_event(
                 "chat.done",

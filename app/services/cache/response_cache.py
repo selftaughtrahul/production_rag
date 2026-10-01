@@ -13,9 +13,13 @@ _client: Any = None
 _client_failed = False
 
 
+# Bump when a cached reply would no longer match current guardrail or routing behavior.
+_CACHE_VERSION = "2"
+
+
 def cache_key(user_id: str, question: str) -> str:
     digest = hashlib.sha256(question.strip().lower().encode("utf-8")).hexdigest()
-    return f"rag:answer:{user_id}:{digest}"
+    return f"rag:answer:{_CACHE_VERSION}:{user_id}:{digest}"
 
 
 def _redis() -> Any:
