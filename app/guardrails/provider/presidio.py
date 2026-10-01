@@ -11,15 +11,26 @@ except Exception as exc:
     logger.warning("Presidio is unavailable and will be skipped: %s", exc)
 
 
+# Dates and clock times show up in ordinary questions. They are not identity data.
+IGNORED_PII_ENTITIES = frozenset({"DATE_TIME"})
+
+
 class PresidioProvider:
     def __init__(self, analyzer=None, anonymizer=None):
-        if AnalyzerEngine is None or AnonymizerEngine is None:
-            raise RuntimeError("Presidio/spaCy could not be loaded on this machine.")
-        self.analyzer = analyzer or AnalyzerEngine()
-        self.anonymizer = anonymizer or AnonymizerEngine()
+        if analyzer is None or anonymizer is None:
+            if AnalyzerEngine is None or AnonymizerEngine is None:
+                raise RuntimeError("Presidio/spaCy could not be loaded on this machine.")
+            analyzer = analyzer or AnalyzerEngine()
+            anonymizer = anonymizer or AnonymizerEngine()
+        self.analyzer = analyzer
+        self.anonymizer = anonymizer
 
-    def analyze_and_anonymize(self, text: str, entities: list[str] = None) -> dict:
-        results = self.analyzer.analyze(text=text, entities=entities, language="en")
+    def analyze_and_anonymize(self, text: str, entities: list[str] | None = None) -> dict:
+        results = [
+            item
+            for item in self.analyzer.analyze(text=text, entities=entities, language="en")
+            if item.entity_type not in IGNORED_PII_ENTITIES
+        ]
         if not results:
             return {"passed": True, "anonymized_text": text, "entities": []}
 

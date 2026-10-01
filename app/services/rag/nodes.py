@@ -286,11 +286,16 @@ class RAGNodes:
             return {"input_guardrail_passed": True}
 
         result = await self.input_guardrails.validate(state["question"])
-        return {
-            "input_guardrail_passed": result.passed,
-            "input_guardrail_reason": result.reason,
+        anonymized = result.action == "anonymize"
+        update = {
+            "input_guardrail_passed": result.passed or anonymized,
+            "input_guardrail_reason": None if anonymized else result.reason,
             "guardrail_metadata": result.metadata,
         }
+        redacted = result.metadata.get("anonymized_text")
+        if anonymized and isinstance(redacted, str) and redacted.strip():
+            update["question"] = redacted
+        return update
 
     async def validate_output(self, state: RAGState):
         if state.get("skip_generate"):

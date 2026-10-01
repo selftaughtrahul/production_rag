@@ -35,13 +35,20 @@ class InputGuardrailNode:
         }
         if self.guardrail_service is None:
             return update
-        result = await self.guardrail_service.validate(state.get("query", ""))
-        if not result.passed:
+        query = state.get("query", "")
+        result = await self.guardrail_service.validate(query)
+        anonymized = result.action == "anonymize"
+        if not result.passed and not anonymized:
             logger.warning("Input guardrail blocked request: %s", result.reason)
+        elif anonymized:
+            logger.info("Input guardrail redacted request: %s", result.reason)
+        redacted = result.metadata.get("anonymized_text")
+        if anonymized and isinstance(redacted, str) and redacted.strip():
+            update["query"] = redacted
         update.update(
             {
-                "input_guardrail_passed": result.passed,
-                "input_guardrail_reason": result.reason,
+                "input_guardrail_passed": result.passed or anonymized,
+                "input_guardrail_reason": None if anonymized else result.reason,
                 "guardrail_metadata": {
                     **state.get("guardrail_metadata", {}),
                     **result.metadata,
