@@ -391,6 +391,74 @@ class QdrantVectorStore(VectorStore):
 
         return int(result.count)
 
+    def preview_document_text(
+        self,
+        document_id: str,
+        user_id: str,
+        *,
+        limit: int = 1200,
+    ) -> str:
+        """Return the start of a document's stored chunk text."""
+        points, _offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=self._document_filter(document_id, {TENANT_KEY: user_id}),
+            limit=8,
+            with_payload=True,
+            with_vectors=False,
+        )
+        def _chunk_index(point: Any) -> int:
+            raw = ((point.payload or {}).get("metadata") or {}).get("chunk_index")
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                return 0
+
+        ordered = sorted(points, key=_chunk_index)
+        parts: list[str] = []
+        total = 0
+        for point in ordered:
+            text = str((point.payload or {}).get("text") or "").strip()
+            if not text:
+                continue
+            parts.append(text)
+            total += len(text)
+            if total >= limit:
+                break
+        preview = "\n\n".join(parts).strip()
+        if len(preview) > limit:
+            return preview[:limit].rstrip() + "…"
+        return preview
+
+    def set_document_tags(
+        self,
+        document_id: str,
+        user_id: str,
+        tags: list[str],
+    ) -> None:
+        """Replace metadata.tags on every chunk of one owned document."""
+        query_filter = self._document_filter(document_id, {TENANT_KEY: user_id})
+        offset = None
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=query_filter,
+                limit=64,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for point in points:
+                metadata = dict((point.payload or {}).get("metadata") or {})
+                metadata["tags"] = list(tags)
+                self.client.set_payload(
+                    collection_name=self.collection_name,
+                    payload={"metadata": metadata},
+                    points=[point.id],
+                    wait=False,
+                )
+            if offset is None:
+                break
+
     # =========================================================
     # DOCUMENT EXISTS
     # =========================================================

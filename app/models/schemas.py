@@ -4,6 +4,7 @@ Pydantic request / response schemas for the RAG API.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Literal
 
@@ -16,8 +17,11 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 MAX_TAGS = 20
 MAX_TAG_LENGTH = 32
+MAX_METADATA = 20
+MAX_METADATA_VALUE = 64
 RESERVED_TAGS = frozenset({"user_id", "document_id", "filename", "chunk_id", "chunk_index"})
 _TAG_DROP = re.compile(r"[^a-z0-9_-]+")
+_META_VALUE_DROP = re.compile(r"[\x00-\x1f]+")
 
 
 def normalize_tags(raw: Any) -> list[str]:
@@ -41,6 +45,49 @@ def normalize_tags(raw: Any) -> list[str]:
         if len(tags) >= MAX_TAGS:
             break
     return tags
+
+
+def normalize_metadata(raw: Any) -> dict[str, str]:
+    """Turn a JSON object or ``key: value`` pairs into short custom metadata."""
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {}
+        if text.startswith("{"):
+            try:
+                raw = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise ValueError("metadata must be a JSON object") from exc
+        else:
+            parsed: dict[str, str] = {}
+            for part in text.split(","):
+                piece = part.strip()
+                if not piece:
+                    continue
+                sep = ":" if ":" in piece else "=" if "=" in piece else ""
+                if not sep:
+                    continue
+                key, value = piece.split(sep, 1)
+                parsed[key] = value
+            raw = parsed
+    if not isinstance(raw, dict):
+        raise ValueError("metadata must be an object")
+
+    metadata: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            continue
+        norm_key = normalize_tags([key])
+        clean_key = norm_key[0] if norm_key else ""
+        clean_value = _META_VALUE_DROP.sub(" ", value).strip()[:MAX_METADATA_VALUE]
+        if not clean_key or not clean_value:
+            continue
+        metadata[clean_key] = clean_value
+        if len(metadata) >= MAX_METADATA:
+            break
+    return metadata
 
 
 # ─────────────────────────────────────────────────────────────
@@ -159,14 +206,43 @@ class ChatRequest(BaseModel):
 
 from datetime import datetime
 
+DocumentStatus = Literal["processing", "ready", "failed"]
+
+
 class DocumentResponse(BaseModel):
     id: str
     user_id: str
     file_name: str
     created_at: datetime
     tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, str] = Field(default_factory=dict)
     file_size: int | None = None
     chunk_count: int = 0
+    status: DocumentStatus = "ready"
+    error_message: str | None = None
+
+
+class DocumentDetailResponse(DocumentResponse):
+    preview: str | None = None
+
+
+class DocumentUpdate(BaseModel):
+    tags: list[str] | None = None
+    metadata: dict[str, str] | None = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def clean_tags(cls, v: Any) -> list[str] | None:
+        if v is None:
+            return None
+        return normalize_tags(v)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def clean_metadata(cls, v: Any) -> dict[str, str] | None:
+        if v is None:
+            return None
+        return normalize_metadata(v)
 
 
 # ─────────────────────────────────────────────────────────────

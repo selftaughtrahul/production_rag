@@ -30,6 +30,9 @@ class User(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index("idx_documents_user_hash", "user_id", "content_hash", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(
@@ -39,6 +42,15 @@ class Document(Base):
     file_path: Mapped[str | None] = mapped_column(String, nullable=True)
     # JSON-encoded list of user tags; mirrored onto every chunk as metadata.tags
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON object of user key/value chips, shown on the document
+    custom_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # processing | ready | failed. Existing rows are already ingested.
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="ready", server_default="ready"
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # SHA-256 of the upload bytes; unique per user so the same file is rejected
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp()
     )

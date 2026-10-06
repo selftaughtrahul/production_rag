@@ -84,4 +84,15 @@ def init_db() -> None:
     )
     _ensure_column("documents", "file_path", "TEXT")
     _ensure_column("documents", "tags", "TEXT")
+    _ensure_column("documents", "custom_metadata", "TEXT")
+    _ensure_column("documents", "status", "TEXT NOT NULL DEFAULT 'ready'")
+    _ensure_column("documents", "error_message", "TEXT")
+    _ensure_column("documents", "content_hash", "TEXT")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_user_hash "
+                "ON documents (user_id, content_hash)"
+            )
+        )
     logger.info("SQLite schema ready at %s (users, documents, user_memories).", CHECKPOINT_DB_PATH)

@@ -4,7 +4,19 @@
 
   var VIEW_KEY = "rag_docs_view";
   var uploadChips = null;
+  var uploadMeta = null;
+  var detailTags = null;
+  var detailMeta = null;
   var items = [];
+  var openId = null;
+  var previewFor = null;
+  var pollTimer = null;
+
+  var STATUS_LABEL = {
+    processing: "Processing",
+    ready: "Ready",
+    failed: "Failed"
+  };
 
   function showAlert(message) {
     $("#docs-alert").text(message || "").toggleClass("is-visible", Boolean(message));
@@ -63,17 +75,56 @@
       .append($('<span class="doc-meta-value"></span>').text(value));
   }
 
+  function statusOf(item) {
+    return item && STATUS_LABEL[item.status] ? item.status : "ready";
+  }
+
+  function statusText(item) {
+    var status = statusOf(item);
+    var label = STATUS_LABEL[status];
+    if (item && item.error_message) {
+      return label + " — " + item.error_message;
+    }
+    return label;
+  }
+
+  function setProgress(percent, label, processing) {
+    var $box = $("#upload-progress").prop("hidden", false);
+    $box.toggleClass("is-processing", Boolean(processing));
+    $("#upload-progress-bar").css("width", processing ? "" : percent + "%");
+    $("#upload-progress-label").text(label || "");
+  }
+
+  function hideProgress() {
+    $("#upload-progress").prop("hidden", true).removeClass("is-processing");
+    $("#upload-progress-bar").css("width", "0");
+    $("#upload-progress-label").text("");
+  }
+
   function renderItem(item) {
+    var status = statusOf(item);
     var $li = $('<li class="doc-item"></li>').attr("data-id", item.id);
 
     var $head = $('<div class="doc-head"></div>');
-    $head.append($('<span class="doc-name"></span>').text(item.file_name || "Untitled").attr("title", item.file_name || ""));
+    $head.append(
+      $('<button type="button" class="doc-name" data-action="show"></button>')
+        .text(item.file_name || "Untitled")
+        .attr("title", item.file_name || "")
+    );
+    $head.append($('<span class="doc-status"></span>').addClass("is-" + status).text(STATUS_LABEL[status]));
+    if (item.error_message) {
+      $head.append($('<span class="doc-error"></span>').text(item.error_message));
+    }
     $li.append($head);
 
     var $tags = $('<div class="doc-tags"></div>');
     if (item.tags && item.tags.length) {
       $tags.append(App.renderTags(item.tags));
-    } else {
+    }
+    if (item.metadata && Object.keys(item.metadata).length) {
+      $tags.append(App.renderMeta(item.metadata));
+    }
+    if (!$tags.children().length) {
       $tags.append($('<span class="doc-no-tags"></span>').text("No tags"));
     }
     $li.append($tags);
@@ -86,6 +137,7 @@
     $li.append($meta);
 
     var $actions = $('<div class="doc-actions"></div>');
+    $actions.append($('<button type="button" class="btn ghost small" data-action="show">Details</button>'));
     $actions.append(
       $('<button type="button" class="btn ghost small" data-action="download">Download</button>')
         .prop("disabled", item.file_size == null)
@@ -126,9 +178,11 @@
         items = res || [];
         showAlert("");
         renderList();
+        syncOpenStatus();
         if (uploadChips) {
           uploadChips.suggest(allTags());
         }
+        schedulePoll();
       })
       .fail(function (xhr) {
         showAlert(App.errorMessage(xhr, "Could not load documents."));
@@ -212,6 +266,96 @@
       });
   }
 
+  function schedulePoll() {
+    if (pollTimer) {
+      return;
+    }
+    var pending = items.some(function (item) { return statusOf(item) === "processing"; });
+    if (!pending) {
+      return;
+    }
+    pollTimer = window.setTimeout(function () {
+      pollTimer = null;
+      load();
+    }, 2000);
+  }
+
+  function closeDetail() {
+    openId = null;
+    previewFor = null;
+    $("#doc-detail").prop("hidden", true);
+  }
+
+  function syncOpenStatus() {
+    if (!openId) {
+      return;
+    }
+    var item = findItem(openId);
+    if (!item) {
+      closeDetail();
+      return;
+    }
+    $("#doc-detail-status").text(statusText(item));
+    $("#detail-save").prop("disabled", statusOf(item) === "processing");
+    if (statusOf(item) === "ready" && previewFor !== item.id) {
+      previewFor = item.id;
+      App.api("GET", "/documents/" + encodeURIComponent(item.id))
+        .done(function (doc) {
+          if (openId === doc.id) {
+            $("#doc-preview").text(doc.preview || "No preview.");
+          }
+        });
+    }
+  }
+
+  function showDocument(id) {
+    showAlert("");
+    App.api("GET", "/documents/" + encodeURIComponent(id))
+      .done(function (doc) {
+        openId = doc.id;
+        previewFor = statusOf(doc) === "ready" ? doc.id : null;
+        $("#doc-detail").prop("hidden", false);
+        $("#doc-detail-name").text(doc.file_name || "Untitled");
+        $("#doc-detail-status").text(statusText(doc));
+        if (!detailTags) {
+          detailTags = App.chips($("#detail-tags"), { placeholder: "Type a tag, press Enter" });
+          detailMeta = App.metaChips($("#detail-meta"), { placeholder: "key: value, then Enter" });
+        }
+        detailTags.set(doc.tags || []);
+        detailMeta.set(doc.metadata || {});
+        $("#detail-save").prop("disabled", statusOf(doc) === "processing");
+        if (doc.preview) {
+          $("#doc-preview").text(doc.preview);
+        } else if (statusOf(doc) === "processing") {
+          $("#doc-preview").text("Still processing…");
+        } else {
+          $("#doc-preview").text("No preview.");
+        }
+      })
+      .fail(function (xhr) {
+        showAlert(App.errorMessage(xhr, "Could not open that document."));
+      });
+  }
+
+  function saveDetail() {
+    if (!openId || !detailTags || !detailMeta) {
+      return;
+    }
+    $("#detail-save").prop("disabled", true);
+    App.api.json("PATCH", "/documents/" + encodeURIComponent(openId), {
+      tags: detailTags.get(),
+      metadata: detailMeta.get()
+    })
+      .done(function () {
+        showInfo("Saved tags and metadata.");
+        load();
+      })
+      .fail(function (xhr) {
+        $("#detail-save").prop("disabled", false);
+        showAlert(App.errorMessage(xhr, "Could not save document details."));
+      });
+  }
+
   /* Async (Celery) mode returns a task id; poll until it settles, then reload. */
   function pollTask(taskId, attempt) {
     attempt = attempt || 0;
@@ -222,9 +366,11 @@
     App.api("GET", "/tasks/" + encodeURIComponent(taskId))
       .done(function (res) {
         if (res.status === "SUCCESS") {
+          hideProgress();
           showInfo("Document ingested.");
           load();
         } else if (res.status === "FAILURE") {
+          hideProgress();
           showInfo("");
           showAlert(res.error || "Ingestion failed.");
           load();
@@ -246,32 +392,62 @@
       return;
     }
     var tags = uploadChips ? uploadChips.get() : [];
+    var metadata = uploadMeta ? uploadMeta.get() : {};
     var form = new FormData();
     form.append("file", file, file.name);
     form.append("tags", JSON.stringify(tags));
+    form.append("metadata", JSON.stringify(metadata));
 
     showAlert("");
-    showInfo("Uploading " + file.name + "…");
+    showInfo("");
+    setProgress(0, "Uploading " + file.name + "…", false);
     $("#upload-btn").prop("disabled", true);
 
-    App.api("POST", "/ingest", { data: form, processData: false, contentType: false })
+    App.api("POST", "/ingest", {
+      data: form,
+      processData: false,
+      contentType: false,
+      xhr: function () {
+        var xhr = $.ajaxSettings.xhr();
+        if (xhr.upload) {
+          xhr.upload.addEventListener("progress", function (event) {
+            if (!event.lengthComputable) {
+              return;
+            }
+            var pct = Math.round((event.loaded / event.total) * 100);
+            setProgress(pct, "Uploading " + file.name + "… " + pct + "%", false);
+          });
+        }
+        return xhr;
+      }
+    })
       .done(function (res) {
         $("#upload-file").val("");
         if (uploadChips) {
           uploadChips.clear();
         }
-        if (res && res.task_id) {
+        if (uploadMeta) {
+          uploadMeta.clear();
+        }
+        if (res && (res.task_id || res.status === "processing")) {
+          setProgress(100, "Processing " + file.name + "…", true);
           showInfo("Upload received. Ingesting in the background…");
-          pollTask(res.task_id, 0);
+          load();
+          if (res.task_id) {
+            pollTask(res.task_id, 0);
+          }
         } else {
           var n = res && res.ingestion && res.ingestion.chunks_count;
+          hideProgress();
           showInfo("Ingested " + file.name + (n != null ? " (" + n + " chunks)." : "."));
           load();
         }
       })
       .fail(function (xhr) {
+        hideProgress();
         showInfo("");
         showAlert(App.errorMessage(xhr, "Upload failed."));
+        load();
       })
       .always(function () {
         $("#upload-btn").prop("disabled", false);
@@ -280,6 +456,7 @@
 
   App.startDocuments = function () {
     uploadChips = App.chips($("#upload-tags"), { placeholder: "Type a tag, press Enter" });
+    uploadMeta = App.metaChips($("#upload-meta"), { placeholder: "key: value, then Enter" });
     setView(getView());
 
     $(".view-btn").on("click", function () {
@@ -295,8 +472,13 @@
         download(id);
       } else if (action === "delete") {
         remove(id);
+      } else if (action === "show") {
+        showDocument(id);
       }
     });
+
+    $("#doc-detail-close").on("click", closeDetail);
+    $("#detail-save").on("click", saveDetail);
 
     load();
   };
