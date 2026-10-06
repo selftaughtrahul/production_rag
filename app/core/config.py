@@ -112,6 +112,7 @@ class Settings:
     dense_top_k: int
     fusion_top_k: int
     rerank_top_k: int
+    context_max_chars: int
     LOG_DIR:str
     IS_ASYNC:bool
     enable_nemo: bool
@@ -132,6 +133,11 @@ class Settings:
 
     # ── Document parsing ──────────────────────
     document_parser: str
+    document_ocr: bool
+    max_upload_bytes: int
+    clamav_enabled: bool
+    clamav_command: str
+    ingest_max_retries: int
 
 
     @classmethod
@@ -179,6 +185,7 @@ class Settings:
             dense_top_k=int(os.getenv("DENSE_TOP_K", "20")),
             fusion_top_k=int(os.getenv("FUSION_TOP_K", "20")),
             rerank_top_k=int(os.getenv("RERANK_TOP_K", "5")),
+            context_max_chars=int(os.getenv("CONTEXT_MAX_CHARS", "8000")),
             IS_ASYNC=_env_flag("IS_ASYNC", "false"),
             LOG_DIR=os.getenv("LOG_DIR", "logs"),
             enable_nemo=_env_flag("ENABLE_NEMO", "true"),
@@ -200,6 +207,11 @@ class Settings:
             memory_hard_limit=int(os.getenv("MEMORY_HARD_LIMIT", "20000")),
             keep_recent_messages=int(os.getenv("KEEP_RECENT_MESSAGES", "6")),
             document_parser=_document_parser(),
+            document_ocr=_env_flag("DOCUMENT_OCR", "false"),
+            max_upload_bytes=int(os.getenv("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024))),
+            clamav_enabled=_env_flag("CLAMAV_ENABLED", "false"),
+            clamav_command=os.getenv("CLAMAV_COMMAND", "clamscan"),
+            ingest_max_retries=max(0, int(os.getenv("INGEST_MAX_RETRIES", "3"))),
         )
 
     def local_model_path(self, model: str) -> str:

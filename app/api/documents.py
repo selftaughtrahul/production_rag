@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import shutil
 from pathlib import Path
 from uuid import uuid4
 from celery.result import AsyncResult
@@ -24,7 +25,8 @@ from app.models.schemas import (
     normalize_tags,
 )
 from app.services.auth.dependencies import get_current_user
-from app.tasks.tasks import ingest_document_task
+from app.services.ingestion.document_loader import UploadRejected, scan_saved_file, validate_upload_bytes
+from app.tasks.tasks import ingest_document_task, record_ingestion_failure
 from database.models import Document
 from database.sqlite import get_db
 from app.core.config import Settings
@@ -166,6 +168,9 @@ def _delete_stored_file(file_path: str | None) -> None:
 
     try:
         resolved.unlink(missing_ok=True)
+        images = resolved.parent / f"{resolved.stem}_images"
+        if images.is_dir() and _DOCUMENTS_ROOT.resolve() in images.resolve().parents:
+            shutil.rmtree(images, ignore_errors=True)
     except OSError:
         logger.warning("Could not remove stored upload %s", resolved, exc_info=True)
 
@@ -207,8 +212,14 @@ async def ingest_document(
         raise HTTPException(status_code=400, detail="Filename is required")
 
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    try:
+        validate_upload_bytes(
+            file.filename,
+            content,
+            max_bytes=settings.max_upload_bytes,
+        )
+    except UploadRejected as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     tag_list = _parse_tags_form(tags)
     custom_metadata = _parse_metadata_form(metadata)
@@ -222,6 +233,16 @@ async def ingest_document(
 
     document_id = str(uuid4())
     file_path = _save_upload(file, content, user_id=current_user.id, document_id=document_id)
+    try:
+        scan_saved_file(
+            Path(file_path),
+            enabled=settings.clamav_enabled,
+            command=settings.clamav_command,
+        )
+    except UploadRejected as exc:
+        _delete_stored_file(file_path)
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
     row = Document(
         id=document_id,
         user_id=current_user.id,
@@ -252,8 +273,18 @@ async def ingest_document(
                 filename=file.filename,
                 user_id=current_user.id,
                 tags=tag_list,
+                custom_metadata=custom_metadata,
+                content_hash=content_hash,
+                file_size=len(content),
             )
-        except Exception:
+        except Exception as exc:
+            record_ingestion_failure(
+                document_id=document_id,
+                user_id=current_user.id,
+                payload={"source": file_path, "filename": file.filename, "tags": tag_list},
+                exc=exc,
+                retries=0,
+            )
             _mark_failed(db, row, file_path)
             raise
         return {
@@ -276,11 +307,21 @@ async def ingest_document(
             filename=file.filename,
             user_id=current_user.id,
             tags=tag_list,
+            custom_metadata=custom_metadata,
+            content_hash=content_hash,
+            file_size=len(content),
         )
 
     try:
         result = await asyncio.to_thread(_ingest_sync)
-    except Exception:
+    except Exception as exc:
+        record_ingestion_failure(
+            document_id=document_id,
+            user_id=current_user.id,
+            payload={"source": file_path, "filename": file.filename, "tags": tag_list},
+            exc=exc,
+            retries=0,
+        )
         _mark_failed(db, row, file_path)
         raise
 

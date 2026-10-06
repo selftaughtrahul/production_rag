@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+import re
+import subprocess
 import time
+import zipfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -12,6 +15,160 @@ from typing import Any
 from llama_index.core import SimpleDirectoryReader
 
 logger = logging.getLogger(__name__)
+
+_TEXT_EXTENSIONS = frozenset({".txt", ".md", ".csv", ".json"})
+_ZIP_EXTENSIONS = frozenset({".docx", ".pptx", ".xlsx"})
+_MAGIC_PREFIXES: dict[str, tuple[bytes, ...]] = {
+    ".pdf": (b"%PDF",),
+    ".docx": (b"PK\x03\x04",),
+    ".pptx": (b"PK\x03\x04",),
+    ".xlsx": (b"PK\x03\x04",),
+}
+_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+_MAX_EXTRACTED_IMAGES = 30
+_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+_IMAGE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+class UploadRejected(ValueError):
+    """Caller-facing upload failure. ``status_code`` is safe to return over HTTP."""
+
+    def __init__(self, message: str, *, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def content_type_for(extension: str) -> str:
+    return _CONTENT_TYPES.get(extension.lower(), "application/octet-stream")
+
+
+def validate_upload_bytes(filename: str, content: bytes, *, max_bytes: int) -> str:
+    """Check name, size, extension, and magic bytes. Return the normalized extension."""
+    name = (filename or "").replace("\\", "/").split("/")[-1].strip()
+    if not name or name in {".", ".."} or "\x00" in name:
+        raise UploadRejected("Filename is required")
+    extension = Path(name).suffix.lower()
+    allowed = DocumentLoaderLibrary.SUPPORTED_EXTENSIONS
+    if extension not in allowed:
+        raise UploadRejected(
+            f"Unsupported file type: {extension or 'none'}. "
+            f"Supported types: {sorted(allowed)}"
+        )
+    if not content:
+        raise UploadRejected("Uploaded file is empty")
+    if max_bytes > 0 and len(content) > max_bytes:
+        raise UploadRejected(f"File exceeds the {max_bytes} byte limit")
+
+    if extension in _TEXT_EXTENSIONS:
+        sample = content[:4096]
+        if b"\x00" in sample or sample.startswith(b"%PDF") or sample.startswith(b"PK\x03\x04"):
+            raise UploadRejected("File content does not match its extension")
+        return extension
+
+    prefixes = _MAGIC_PREFIXES.get(extension)
+    if prefixes and not content.startswith(prefixes):
+        raise UploadRejected("File content does not match its extension")
+    return extension
+
+
+def scan_saved_file(path: Path, *, enabled: bool, command: str) -> None:
+    """Run ClamAV when enabled. A missing scanner fails closed."""
+    if not enabled:
+        return
+    binary = (command or "clamscan").strip() or "clamscan"
+    try:
+        completed = subprocess.run(
+            [binary, "--no-summary", str(path)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise UploadRejected("Malware scanner is unavailable", status_code=503) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise UploadRejected("Malware scanner is unavailable", status_code=503) from exc
+
+    if completed.returncode == 0:
+        return
+    if completed.returncode == 1:
+        logger.warning("Malware scan rejected %s", path.name)
+        raise UploadRejected("File failed malware scan")
+    logger.warning(
+        "Malware scanner exited %s for %s", completed.returncode, path.name
+    )
+    raise UploadRejected("Malware scanner is unavailable", status_code=503)
+
+
+def extract_embedded_images(source: Path, dest_dir: Path) -> list[str]:
+    """Copy embedded images next to the upload and return searchable labels."""
+    try:
+        blobs = _image_blobs(source)
+    except Exception:  # noqa: BLE001 - image extraction must not fail ingestion
+        logger.warning("Image extraction failed for %s", source.name, exc_info=True)
+        return []
+    if not blobs:
+        return []
+
+    labels: list[str] = []
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    for index, (raw_name, data, page) in enumerate(blobs[:_MAX_EXTRACTED_IMAGES], start=1):
+        if not data or len(data) > _MAX_IMAGE_BYTES:
+            continue
+        safe = _IMAGE_NAME.sub("_", Path(raw_name).name).strip("._") or f"image_{index}"
+        target = dest_dir / f"{index}_{safe}"
+        try:
+            target.write_bytes(data)
+        except OSError:
+            logger.warning("Could not store image %s", safe, exc_info=True)
+            continue
+        page_label = f" page {page}" if page is not None else ""
+        labels.append(f"[image:{target.name}{page_label}]")
+    return labels
+
+
+def _image_blobs(source: Path) -> list[tuple[str, bytes, int | None]]:
+    extension = source.suffix.lower()
+    if extension == ".pdf":
+        return _pdf_image_blobs(source)
+    if extension in _ZIP_EXTENSIONS:
+        return _zip_image_blobs(source, extension)
+    return []
+
+
+def _pdf_image_blobs(source: Path) -> list[tuple[str, bytes, int | None]]:
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(source))
+    blobs: list[tuple[str, bytes, int | None]] = []
+    for page_number, page in enumerate(reader.pages, start=1):
+        for image in getattr(page, "images", []) or []:
+            data = getattr(image, "data", None)
+            if isinstance(data, bytes):
+                blobs.append((str(getattr(image, "name", "image")), data, page_number))
+    return blobs
+
+
+def _zip_image_blobs(source: Path, extension: str) -> list[tuple[str, bytes, int | None]]:
+    prefix = {".docx": "word/media/", ".pptx": "ppt/media/", ".xlsx": "xl/media/"}[extension]
+    blobs: list[tuple[str, bytes, int | None]] = []
+    with zipfile.ZipFile(source) as archive:
+        for info in archive.infolist():
+            if info.is_dir() or not info.filename.startswith(prefix):
+                continue
+            if info.file_size > _MAX_IMAGE_BYTES:
+                continue
+            blobs.append((Path(info.filename).name, archive.read(info), None))
+    return blobs
 
 
 @dataclass(slots=True)
@@ -526,15 +683,13 @@ _DOCLING_LABELS: dict[str, str] = {
 
 
 class DoclingParser(DocumentParser):
-    """
-    Layout-aware parsing via Docling. OCR stays off so digital PDFs are not
-    re-read through an OCR engine; scanned-page OCR is a later change.
-    """
+    """Layout-aware parsing via Docling. OCR runs only when ``do_ocr`` is set."""
 
     name = "docling"
     supported_extensions = frozenset({".pdf", ".docx", ".pptx"})
 
-    def __init__(self) -> None:
+    def __init__(self, do_ocr: bool = False) -> None:
+        self.do_ocr = do_ocr
         self._converter: Any = None
 
     def _get_converter(self) -> Any:
@@ -544,7 +699,7 @@ class DoclingParser(DocumentParser):
         from docling.datamodel.pipeline_options import PdfPipelineOptions
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
-        pdf_options = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
+        pdf_options = PdfPipelineOptions(do_ocr=self.do_ocr, do_table_structure=True)
         self._converter = DocumentConverter(
             format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_options)}
         )
@@ -602,7 +757,7 @@ class DoclingParser(DocumentParser):
             parser=self.name,
             parser_version=_package_version("docling"),
             page_count=_docling_page_count(doc),
-            ocr_used=False,
+            ocr_used=self.do_ocr,
             failed_pages=failed_pages,
             metadata=library.get_metadata(),
             elements=elements,
@@ -711,12 +866,16 @@ _UNSTRUCTURED_CATEGORIES: dict[str, str] = {
 
 class UnstructuredParser(DocumentParser):
     """
-    Unstructured ``partition`` with the ``fast`` strategy: no layout model,
-    no Tesseract. Tables arrive as HTML when the partitioner exposes them.
+    Unstructured ``partition``. The default ``fast`` strategy skips Tesseract.
+    ``do_ocr`` switches to ``auto``, which OCRs pages that have no text layer.
+    Tables arrive as HTML when the partitioner exposes them.
     """
 
     name = "unstructured"
     supported_extensions = frozenset({".pdf", ".docx", ".pptx"})
+
+    def __init__(self, do_ocr: bool = False) -> None:
+        self.do_ocr = do_ocr
 
     def parse(self, source: Path) -> CanonicalDocument:
         library = DocumentLoaderLibrary(source)
@@ -728,7 +887,10 @@ class UnstructuredParser(DocumentParser):
 
         from unstructured.partition.auto import partition
 
-        raw_elements = partition(filename=str(library.source), strategy="fast")
+        raw_elements = partition(
+            filename=str(library.source),
+            strategy="auto" if self.do_ocr else "fast",
+        )
 
         elements: list[DocumentElement] = []
         current_section: str | None = None
@@ -783,7 +945,7 @@ class UnstructuredParser(DocumentParser):
             parser=self.name,
             parser_version=_package_version("unstructured"),
             page_count=max_page,
-            ocr_used=False,
+            ocr_used=self.do_ocr,
             metadata=library.get_metadata(),
             elements=elements,
         )
@@ -864,21 +1026,22 @@ class ParserSelector:
     same interface as DocumentLoaderLibrary.
     """
 
-    def __init__(self, mode: str = "existing") -> None:
+    def __init__(self, mode: str = "existing", ocr: bool = False) -> None:
         from app.core.config import DOCUMENT_PARSER_CHOICES
 
         if mode not in DOCUMENT_PARSER_CHOICES:
             raise ValueError(f"Unknown DOCUMENT_PARSER mode: {mode!r}")
         self.mode = mode
+        self.ocr = ocr
         self._existing = ExistingLlamaIndexParser()
         self._parsers: dict[str, DocumentParser] = {}
 
     def _parser(self, name: str) -> DocumentParser:
         if name not in self._parsers:
             if name == "docling":
-                self._parsers[name] = DoclingParser()
+                self._parsers[name] = DoclingParser(do_ocr=self.ocr)
             elif name == "unstructured":
-                self._parsers[name] = UnstructuredParser()
+                self._parsers[name] = UnstructuredParser(do_ocr=self.ocr)
             else:
                 raise ValueError(f"No parser registered for {name!r}")
         return self._parsers[name]
@@ -934,4 +1097,27 @@ class ParserSelector:
         if document.report is not None:
             document.report.processing_seconds = time.perf_counter() - started
             document.report.fallback_from = failed
-        return document
+        if document.text.strip() or not self.ocr or extension != ".pdf":
+            return document
+        ocr_document = self._ocr_empty_pdf(path)
+        return ocr_document or document
+
+    def _ocr_empty_pdf(self, path: Path) -> Document | None:
+        """Last resort for a PDF whose text layer is empty."""
+        started = time.perf_counter()
+        try:
+            canonical = DoclingParser(do_ocr=True).parse(path)
+        except Exception as exc:  # noqa: BLE001 - OCR is optional
+            logger.warning(
+                "OCR fallback failed for %s (%s: %s)",
+                path.name, type(exc).__name__, exc,
+            )
+            return None
+        if not any(element.text.strip() for element in canonical.elements):
+            return None
+        canonical.ocr_used = True
+        return flatten_to_document(
+            canonical,
+            processing_seconds=time.perf_counter() - started,
+            fallback_from="existing",
+        )

@@ -16,7 +16,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
-from database.models import Base, Document, MemoryRecord, User
+from database.models import Base, Document, IngestionDeadLetter, MemoryRecord, User
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,12 @@ def init_db() -> None:
     """Create application tables if they do not exist."""
     Base.metadata.create_all(
         bind=engine,
-        tables=[User.__table__, Document.__table__, MemoryRecord.__table__],
+        tables=[
+            User.__table__,
+            Document.__table__,
+            MemoryRecord.__table__,
+            IngestionDeadLetter.__table__,
+        ],
     )
     _ensure_column("documents", "file_path", "TEXT")
     _ensure_column("documents", "tags", "TEXT")

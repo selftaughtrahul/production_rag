@@ -128,18 +128,18 @@ def build_components() -> RAGComponents:
     )
 
 
-@lru_cache(maxsize=4)
-def get_document_parser(mode: str) -> ParserSelector:
-    """One selector per DOCUMENT_PARSER mode so Docling's converter loads once."""
-    logger.info("Document parser mode: %s", mode)
-    return ParserSelector(mode=mode)
+@lru_cache(maxsize=8)
+def get_document_parser(mode: str, ocr: bool = False) -> ParserSelector:
+    """One selector per parser mode and OCR flag so Docling's converter loads once."""
+    logger.info("Document parser mode: %s ocr=%s", mode, ocr)
+    return ParserSelector(mode=mode, ocr=ocr)
 
 
 def build_ingestion_pipeline(source: str) -> IngestionPipeline:
     settings = Settings.from_environment()
     components = build_components()
     return IngestionPipeline(
-        loader=get_document_parser(settings.document_parser),
+        loader=get_document_parser(settings.document_parser, settings.document_ocr),
         cleaner=DataCleaningLibrary(),
         chunker=ChunkerService(
             strategy=LangChainRecursiveStrategy(
