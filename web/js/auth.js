@@ -3,7 +3,7 @@
   "use strict";
 
   var LOGIN = "/login";
-  var DASHBOARD = "/dashboard";
+  var HOME = "/app";
 
   function go(path) {
     window.location.replace(path);
@@ -31,7 +31,7 @@
 
   function onAuthenticated(res) {
     App.setToken(res.access_token);
-    go(DASHBOARD);
+    go(HOME);
   }
 
   function bindTabs() {
@@ -88,12 +88,12 @@
   var pages = {
     gate: function () {
       currentUser()
-        .done(function () { go(DASHBOARD); })
+        .done(function () { go(HOME); })
         .fail(function () { go(LOGIN); });
     },
     login: function () {
       currentUser()
-        .done(function () { go(DASHBOARD); })
+        .done(function () { go(HOME); })
         .fail(function () {
           bindTabs();
           bindForm($("#login-form"), login);
@@ -107,6 +107,18 @@
           $("#username").text(user.username);
           bindLogout();
           reveal();
+        })
+        .fail(function () { go(LOGIN); });
+    },
+    chat: function () {
+      currentUser()
+        .done(function (user) {
+          $("#username").text(user.username);
+          bindLogout();
+          reveal();
+          if (typeof App.startChat === "function") {
+            App.startChat();
+          }
         })
         .fail(function () { go(LOGIN); });
     }

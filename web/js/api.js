@@ -51,6 +51,66 @@
     return api(method, url, { data: body });
   };
 
+  function parseSseBlock(block, onEvent) {
+    var payload = block
+      .split("\n")
+      .filter(function (line) { return line.indexOf("data:") === 0; })
+      .map(function (line) { return line.slice(5).trim(); })
+      .join("\n");
+    if (!payload) {
+      return;
+    }
+    try {
+      onEvent(JSON.parse(payload));
+    } catch (err) {
+      /* Skip keepalives and partial frames. */
+    }
+  }
+
+  /* POST JSON and invoke onEvent for each SSE `data:` object. */
+  api.stream = function (url, body, onEvent) {
+    var headers = { "Content-Type": "application/json", Accept: "text/event-stream" };
+    var token = getToken();
+    if (token) {
+      headers.Authorization = "Bearer " + token;
+    }
+    return fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) })
+      .then(function (res) {
+        if (res.status === 401 || res.status === 403) {
+          clearToken();
+          window.location.replace("/login");
+          return Promise.reject(res);
+        }
+        if (!res.ok) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            var message = typeof data.detail === "string" ? data.detail : "Request failed.";
+            var err = new Error(message);
+            err.status = res.status;
+            throw err;
+          });
+        }
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = "";
+        function pump() {
+          return reader.read().then(function (chunk) {
+            if (chunk.done) {
+              if (buffer.trim()) {
+                parseSseBlock(buffer, onEvent);
+              }
+              return;
+            }
+            buffer += decoder.decode(chunk.value, { stream: true });
+            var parts = buffer.split("\n\n");
+            buffer = parts.pop();
+            parts.forEach(function (block) { parseSseBlock(block, onEvent); });
+            return pump();
+          });
+        }
+        return pump();
+      });
+  };
+
   window.App = {
     api: api,
     getToken: getToken,

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat · RAG Console</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body data-page="chat" class="is-loading">
+  <div class="gpt-shell">
+    <aside class="gpt-sidebar" id="sidebar">
+      <button type="button" class="gpt-new" id="new-chat">New chat</button>
+      <div class="gpt-history-label">Chats</div>
+      <nav class="gpt-history" id="conversation-list" aria-label="Conversation history"></nav>
+      <div class="gpt-sidebar-foot">
+        <a href="/dashboard">Dashboard</a>
+        <span class="user" id="username"></span>
+        <button type="button" class="btn ghost" id="logout">Log out</button>
+      </div>
+    </aside>
+
+    <section class="gpt-main">
+      <header class="gpt-top">
+        <button type="button" class="gpt-menu" id="toggle-sidebar" aria-label="Toggle sidebar">☰</button>
+        <span class="gpt-title" id="chat-title">New chat</span>
+      </header>
+      <div class="gpt-thread" id="thread">
+        <div class="gpt-empty" id="empty-state">
+          <h1>Where should we start?</h1>
+          <p>Ask about your documents. History on the left opens the full thread.</p>
+        </div>
+      </div>
+      <form class="gpt-composer" id="chat-form">
+        <div class="alert" id="chat-alert" role="alert"></div>
+        <div class="gpt-input">
+          <textarea id="question" rows="1" placeholder="Ask anything" required></textarea>
+          <button type="submit" class="btn" id="send">Send</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/chat.js"></script>
+</body>
+</html>

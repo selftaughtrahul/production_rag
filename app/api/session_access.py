@@ -6,7 +6,7 @@ import json
 
 import ormsgpack
 from fastapi import HTTPException
-from sqlalchemy import MetaData, Table, inspect, select
+from sqlalchemy import MetaData, Table, inspect, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -152,6 +152,22 @@ def _first_query_by_thread(session: Session, thread_ids: list[str]) -> dict[str,
     return first
 
 
+def _latest_rowid_by_thread(session: Session) -> dict[str, int]:
+    """Map thread_id -> newest SQLite rowid (latest checkpoint write)."""
+    try:
+        rows = session.execute(
+            text("SELECT thread_id, MAX(rowid) AS latest FROM checkpoints GROUP BY thread_id")
+        ).all()
+    except OperationalError:
+        return {}
+    latest: dict[str, int] = {}
+    for thread_id, rowid in rows:
+        if thread_id is None or rowid is None:
+            continue
+        latest[str(thread_id)] = int(rowid)
+    return latest
+
+
 def list_owned_conversations(user_id: str) -> list[dict]:
     """Return checkpoint conversations owned by the given user."""
     session = SessionLocal()
@@ -189,7 +205,12 @@ def list_owned_conversations(user_id: str) -> list[dict]:
         for thread_id, conversation in conversations.items():
             conversation["first_message"] = first_queries.get(thread_id)
 
-        return list(conversations.values())
+        latest_rowid = _latest_rowid_by_thread(session)
+        return sorted(
+            conversations.values(),
+            key=lambda item: latest_rowid.get(item["session_id"], 0),
+            reverse=True,
+        )
 
     except OperationalError:
         return []
