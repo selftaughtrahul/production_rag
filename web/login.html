@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · RAG Console</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body data-page="login" class="is-loading">
+  <div class="auth-wrap">
+    <div class="card">
+      <h1>RAG Console</h1>
+      <p class="sub">Sign in to your workspace.</p>
+
+      <div class="tabs">
+        <button type="button" class="tab is-active" data-target="#login-form">Sign in</button>
+        <button type="button" class="tab" data-target="#register-form">Create account</button>
+      </div>
+
+      <form id="login-form" class="auth-form" autocomplete="on">
+        <div class="alert" role="alert"></div>
+        <label>Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Password
+          <input type="password" name="password" required autocomplete="current-password">
+        </label>
+        <button type="submit" class="btn">Sign in</button>
+      </form>
+
+      <form id="register-form" class="auth-form" autocomplete="on" style="display:none">
+        <div class="alert" role="alert"></div>
+        <label>Username
+          <input type="text" name="username" required minlength="3" autocomplete="username">
+        </label>
+        <label>Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Password
+          <input type="password" name="password" required minlength="5" autocomplete="new-password">
+        </label>
+        <button type="submit" class="btn">Create account</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+</body>
+</html>
