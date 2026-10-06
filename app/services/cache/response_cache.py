@@ -17,8 +17,13 @@ _client_failed = False
 _CACHE_VERSION = "2"
 
 
-def cache_key(user_id: str, question: str) -> str:
-    digest = hashlib.sha256(question.strip().lower().encode("utf-8")).hexdigest()
+def cache_key(user_id: str, question: str, tags: list[str] | None = None) -> str:
+    """Key on the normalized question plus sorted tags so a tag-filtered
+    answer is never reused for an unfiltered one (or vice versa)."""
+    scope = "|".join(sorted(tags or []))
+    digest = hashlib.sha256(
+        f"{question.strip().lower()}\n{scope}".encode("utf-8")
+    ).hexdigest()
     return f"rag:answer:{_CACHE_VERSION}:{user_id}:{digest}"
 
 
@@ -50,12 +55,14 @@ def _redis() -> Any:
         return None
 
 
-def get_cached_answer(user_id: str, question: str) -> str | None:
+def get_cached_answer(
+    user_id: str, question: str, tags: list[str] | None = None
+) -> str | None:
     client = _redis()
     if client is None or not user_id or not question.strip():
         return None
     try:
-        value = client.get(cache_key(user_id, question))
+        value = client.get(cache_key(user_id, question, tags))
     except Exception:
         logger.warning("Response cache get failed")
         return None
@@ -64,7 +71,9 @@ def get_cached_answer(user_id: str, question: str) -> str | None:
     return None
 
 
-def set_cached_answer(user_id: str, question: str, answer: str) -> None:
+def set_cached_answer(
+    user_id: str, question: str, answer: str, tags: list[str] | None = None
+) -> None:
     client = _redis()
     if client is None or not user_id or not question.strip() or not answer.strip():
         return
@@ -72,6 +81,6 @@ def set_cached_answer(user_id: str, question: str, answer: str) -> None:
 
     ttl = Settings.from_environment().response_cache_ttl_seconds
     try:
-        client.setex(cache_key(user_id, question), ttl, answer)
+        client.setex(cache_key(user_id, question, tags), ttl, answer)
     except Exception:
         logger.warning("Response cache set failed")

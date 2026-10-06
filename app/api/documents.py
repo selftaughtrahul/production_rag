@@ -4,14 +4,17 @@ Document management routes.
  
 """
 
+import asyncio
+import json
+import logging
 from pathlib import Path
 from uuid import uuid4
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from typing import List
 from app.api.dependencies import build_components, build_ingestion_pipeline
-from app.models.schemas import DocumentResponse, UserInDB
+from app.models.schemas import DocumentResponse, UserInDB, normalize_tags
 from app.services.auth.dependencies import get_current_user
 from app.tasks.tasks import ingest_document_task
 from database.models import Document
@@ -20,10 +23,48 @@ from app.core.config import Settings
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 settings = Settings.from_environment()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Documents"])
 
 _DOCUMENTS_ROOT = Path("documents")
+
+
+def _parse_tags_form(raw: str | None) -> list[str]:
+    """Accept a JSON array or a comma-separated string from the upload form."""
+    if not raw or not raw.strip():
+        return []
+    text = raw.strip()
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="tags must be a JSON array") from exc
+        if not isinstance(parsed, list):
+            raise HTTPException(status_code=400, detail="tags must be a JSON array")
+        return normalize_tags(parsed)
+    return normalize_tags(text.split(","))
+
+
+def _row_tags(row: Document) -> list[str]:
+    """Decode the JSON tags column; tolerate legacy rows without tags."""
+    if not row.tags:
+        return []
+    try:
+        parsed = json.loads(row.tags)
+    except json.JSONDecodeError:
+        return []
+    return normalize_tags(parsed) if isinstance(parsed, list) else []
+
+
+def _stored_file_size(file_path: str | None) -> int | None:
+    stored = _resolve_stored_file(file_path)
+    if stored is None or not stored.is_file():
+        return None
+    try:
+        return stored.stat().st_size
+    except OSError:
+        return None
 
 
 def _save_upload(file: UploadFile,content: bytes,*,user_id: str,document_id: str) -> str:
@@ -60,7 +101,7 @@ def _delete_stored_file(file_path: str | None) -> None:
     try:
         resolved.unlink(missing_ok=True)
     except OSError:
-        pass
+        logger.warning("Could not remove stored upload %s", resolved, exc_info=True)
 
 
 
@@ -84,6 +125,7 @@ async def get_task_status(task_id: str,current_user: UserInDB = Depends(get_curr
 @router.post("/ingest", summary="Upload and ingest a document")
 async def ingest_document(
     file: UploadFile = File(...),
+    tags: str | None = Form(default=None),
     current_user: UserInDB = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -91,7 +133,8 @@ async def ingest_document(
     Upload a document and ingest it into the vector store.
 
     The authenticated user's ID is stored as metadata on every chunk
-    so that retrieval can be scoped per-user.
+    so that retrieval can be scoped per-user. Optional ``tags`` (JSON array
+    or comma-separated) are stored on the document and every chunk.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
@@ -100,6 +143,7 @@ async def ingest_document(
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
+    tag_list = _parse_tags_form(tags)
     document_id = str(uuid4())
     file_path = _save_upload(file,content,user_id=current_user.id,document_id=document_id)
 
@@ -110,24 +154,34 @@ async def ingest_document(
             document_id=document_id,
             filename=file.filename,
             user_id=current_user.id,
+            tags=tag_list,
         )
         return {
             "success": True,
             "message": "Upload received. Ingestion started in background.",
             "document_id": document_id,
             "filename": file.filename,
+            "tags": tag_list,
             "task_id": task.id,
             "status": task.status,
         }
 
     # ── Synchronous mode (dev / Windows) ───────────────────
-    pipeline = build_ingestion_pipeline(source=file_path)
-    result = pipeline.ingest(
-        source=file_path,
-        document_id=document_id,
-        filename=file.filename,
-        user_id=current_user.id,
-    )
+    def _ingest_sync() -> dict:
+        pipeline = build_ingestion_pipeline(source=file_path)
+        return pipeline.ingest(
+            source=file_path,
+            document_id=document_id,
+            filename=file.filename,
+            user_id=current_user.id,
+            tags=tag_list,
+        )
+
+    try:
+        result = await asyncio.to_thread(_ingest_sync)
+    except Exception:
+        _delete_stored_file(file_path)
+        raise
 
     db.add(
         Document(
@@ -135,6 +189,7 @@ async def ingest_document(
             user_id=current_user.id,
             file_name=file.filename,
             file_path=file_path,
+            tags=json.dumps(tag_list) if tag_list else None,
         )
     )
 
@@ -144,6 +199,7 @@ async def ingest_document(
         "document_id": document_id,
         "filename": file.filename,
         "user_id": current_user.id,
+        "tags": tag_list,
         "ingestion": result,
     }
 
@@ -152,14 +208,39 @@ async def list_documents(
     current_user: UserInDB = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List all documents uploaded by the authenticated user."""
-    rows = db.scalars(select(Document).where(Document.user_id == current_user.id)).all()
+    """List the user's documents with tags, file size, and stored chunk count."""
+    rows = db.scalars(
+        select(Document)
+        .where(Document.user_id == current_user.id)
+        .order_by(Document.created_at.desc())
+    ).all()
+
+    def _chunk_counts() -> dict[str, int]:
+        if not rows:
+            return {}
+        vector_store = build_components().vector_store
+        counts: dict[str, int] = {}
+        for row in rows:
+            try:
+                counts[row.id] = vector_store.count_document_chunks(
+                    row.id, metadata_filter={"user_id": current_user.id}
+                )
+            except Exception:
+                logger.warning("Chunk count failed for document %s", row.id, exc_info=True)
+                counts[row.id] = 0
+        return counts
+
+    chunk_counts = await asyncio.to_thread(_chunk_counts)
+
     return [
         DocumentResponse(
             id=row.id,
             user_id=row.user_id,
             file_name=row.file_name,
             created_at=row.created_at,
+            tags=_row_tags(row),
+            file_size=_stored_file_size(row.file_path),
+            chunk_count=chunk_counts.get(row.id, 0),
         )
         for row in rows
     ]
@@ -196,24 +277,12 @@ async def delete_document(
     db: Session = Depends(get_db),
 ):
     """
-    Delete a document and all its Qdrant chunks.
+    Delete a document: its Qdrant points (dense + sparse vectors live on the
+    same point), the stored upload, and the SQLite row.
     Only the owning user can delete their own documents.
     """
     if not document_id.strip():
         raise HTTPException(status_code=400, detail="document_id is required")
-
-    components = build_components()
-    vector_store = components.vector_store
-
-    chunks_count = vector_store.count_document_chunks(document_id,metadata_filter={"user_id": current_user.id})
-
-    if chunks_count == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="Document not found or you do not have permission to delete it",
-        )
-
-    vector_store.delete_document(document_id, user_id=current_user.id)
 
     row = db.scalar(
         select(Document).where(
@@ -221,13 +290,24 @@ async def delete_document(
             Document.user_id == current_user.id,
         )
     )
-    _delete_stored_file(row.file_path if row else None)
-    if row is not None:
-        db.delete(row)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found or you do not have permission to delete it",
+        )
+
+    def _delete_vectors() -> int:
+        vector_store = build_components().vector_store
+        return vector_store.delete_document(document_id, user_id=current_user.id)
+
+    deleted_chunks = await asyncio.to_thread(_delete_vectors)
+
+    _delete_stored_file(row.file_path)
+    db.delete(row)
 
     return {
         "success": True,
         "message": "Document deleted successfully",
         "document_id": document_id,
-        "deleted_chunks": chunks_count,
+        "deleted_chunks": deleted_chunks,
     }

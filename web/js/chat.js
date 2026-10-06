@@ -4,6 +4,7 @@
 
   var sessionId = null;
   var busy = false;
+  var tagChips = null;
 
   function escapeHtml(value) {
     return $("<div>").text(value == null ? "" : String(value)).html();
@@ -197,6 +198,10 @@
     if (sessionId) {
       body.session_id = sessionId;
     }
+    var tags = tagChips ? tagChips.get() : [];
+    if (tags.length) {
+      body.tags = tags;
+    }
 
     var seen = "";
     $answer.addClass("is-streaming");
@@ -237,7 +242,28 @@
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }
 
+  /* Offer tags already used on the user's documents as suggestions. */
+  function loadTagSuggestions() {
+    App.api("GET", "/documents").done(function (docs) {
+      var seen = [];
+      (docs || []).forEach(function (doc) {
+        (doc.tags || []).forEach(function (tag) {
+          if (seen.indexOf(tag) === -1) {
+            seen.push(tag);
+          }
+        });
+      });
+      if (tagChips) {
+        tagChips.suggest(seen.sort());
+      }
+    });
+  }
+
   App.startChat = function () {
+    if (typeof App.chips === "function") {
+      tagChips = App.chips($("#chat-tags"), { placeholder: "Add tag (optional)" });
+      loadTagSuggestions();
+    }
     refreshList();
     newChat();
 

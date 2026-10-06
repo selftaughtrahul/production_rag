@@ -24,6 +24,10 @@ class DocumentSearchInput(BaseModel):
     user_id: SkipJsonSchema[str] = Field(
         ..., description="Authenticated user id; always provided by the orchestrator."
     )
+    tags: SkipJsonSchema[list[str]] = Field(
+        default_factory=list,
+        description="Document tags chosen by the user; injected by the orchestrator.",
+    )
 
 
 class DocumentSearchTool(BaseAgentTool):
@@ -38,17 +42,27 @@ class DocumentSearchTool(BaseAgentTool):
     class Config:
         arbitrary_types_allowed = True
 
-    def _run(self, query: str, top_k: int = 5, user_id: str = "") -> str:
+    def _run(
+        self,
+        query: str,
+        top_k: int = 5,
+        user_id: str = "",
+        tags: list[str] | None = None,
+    ) -> str:
         """Synchronous execution wrapper."""
         if not user_id:
             return self._format_error(
                 "Document search requires an authenticated user."
             ).to_str()
         try:
+            metadata_filter: dict = {"user_id": user_id}
+            clean_tags = [tag for tag in (tags or []) if isinstance(tag, str) and tag]
+            if clean_tags:
+                metadata_filter["tags"] = clean_tags
             results = self.retriever.retrieve(
                 query=query,
                 top_k=top_k,
-                metadata_filter={"user_id": user_id},
+                metadata_filter=metadata_filter,
             )
             formatted_docs = []
             for i, doc in enumerate(results, 1):
@@ -74,13 +88,20 @@ class DocumentSearchTool(BaseAgentTool):
             logger.error(f"Error executing DocumentSearchTool: {str(e)}", exc_info=True)
             return self._format_error(f"Failed to execute document search: {str(e)}").to_str()
 
-    async def _arun(self, query: str, top_k: int = 5, user_id: str = "") -> str:
+    async def _arun(
+        self,
+        query: str,
+        top_k: int = 5,
+        user_id: str = "",
+        tags: list[str] | None = None,
+    ) -> str:
         """Async execution bridge."""
         return await asyncio.to_thread(
             self._run,
             query=query,
             top_k=top_k,
             user_id=user_id,
+            tags=tags,
         )
 
 

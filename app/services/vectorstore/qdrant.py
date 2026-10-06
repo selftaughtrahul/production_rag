@@ -157,6 +157,7 @@ class QdrantVectorStore(VectorStore):
         indexes = {
             TENANT_KEY: KeywordIndexParams(type="keyword", is_tenant=True),
             "metadata.document_id": KeywordIndexParams(type="keyword"),
+            "metadata.tags": KeywordIndexParams(type="keyword"),
         }
 
         for field_name, schema in indexes.items():
@@ -509,6 +510,13 @@ class QdrantVectorStore(VectorStore):
 
             if isinstance(value, (str, int, float, bool)):
                 sanitized[key] = value
+            elif isinstance(value, (list, tuple)):
+                # Keep keyword arrays (e.g. tags) so Qdrant can match any element.
+                sanitized[key] = [
+                    item if isinstance(item, (str, int, float, bool)) else str(item)
+                    for item in value
+                    if item is not None
+                ]
             else:
                 sanitized[key] = str(value)
 
@@ -521,20 +529,24 @@ class QdrantVectorStore(VectorStore):
         """
         user_id maps to the top-level tenant field; every other key
         maps to payload["metadata"][key].
+
+        A list value (e.g. tags) becomes one condition per element, so every
+        listed value must be present on the point (AND semantics).
         """
 
         if not metadata_filter:
             return None
 
-        return Filter(
-            must=[
-                FieldCondition(
-                    key=key if key == TENANT_KEY else f"metadata.{key}",
-                    match=MatchValue(value=value),
-                )
-                for key, value in metadata_filter.items()
-            ]
-        )
+        conditions: list[FieldCondition] = []
+        for key, value in metadata_filter.items():
+            field = key if key == TENANT_KEY else f"metadata.{key}"
+            values = value if isinstance(value, (list, tuple, set)) else [value]
+            for item in values:
+                if item is None:
+                    continue
+                conditions.append(FieldCondition(key=field, match=MatchValue(value=item)))
+
+        return Filter(must=conditions) if conditions else None
 
     def _document_filter(
         self,

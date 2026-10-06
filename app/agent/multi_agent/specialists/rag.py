@@ -31,6 +31,7 @@ class RAGSubGraphNode:
         query = state.get("query", "")
         user_id = state.get("user_id", "")
         thread_id = state.get("thread_id", "")
+        doc_tags = list(state.get("doc_tags") or [])
 
         if any(hint in query.lower() for hint in _LIST_HINTS):
             tool = (
@@ -57,6 +58,8 @@ class RAGSubGraphNode:
                 rag_input = {
                     "question": query,
                     "user_id": user_id,
+                    # Always set so a previous turn's tags cannot leak via the checkpoint.
+                    "doc_tags": doc_tags,
                     "skip_memory_persist": True,
                     "skip_generate": True,
                     "rewritten_question": None,
@@ -89,6 +92,7 @@ class RAGSubGraphNode:
                         {"query": query, "top_k": 4, "user_id": user_id},
                         user_id=user_id,
                         session_id=thread_id,
+                        doc_tags=doc_tags,
                     )
                 )
         return self._result(

@@ -27,9 +27,30 @@
       </header>
       <div class="gpt-page">
         <h1>Documents</h1>
-        <p class="sub">Files you have uploaded.</p>
+        <p class="sub">Upload files, tag them, and manage what the assistant can search.</p>
         <div class="alert" id="docs-alert" role="alert"></div>
-        <ul class="doc-list" id="doc-list"></ul>
+        <div class="alert is-info" id="docs-info" role="status"></div>
+
+        <form class="doc-upload" id="upload-form">
+          <label class="doc-file">
+            <span class="doc-file-label">File</span>
+            <input type="file" id="upload-file" required>
+          </label>
+          <label class="doc-tags-field">
+            <span class="doc-file-label">Tags</span>
+            <div id="upload-tags" data-placeholder="Type a tag, press Enter"></div>
+          </label>
+          <button type="submit" class="btn" id="upload-btn">Upload</button>
+        </form>
+
+        <div class="doc-toolbar">
+          <span class="doc-count" id="doc-count"></span>
+          <div class="view-toggle" role="group" aria-label="View">
+            <button type="button" class="view-btn" data-view="list" aria-pressed="false">List</button>
+            <button type="button" class="view-btn" data-view="grid" aria-pressed="false">Grid</button>
+          </div>
+        </div>
+        <ul class="doc-list is-list" id="doc-list"></ul>
       </div>
     </section>
   </div>
@@ -38,6 +59,7 @@
   <script src="/static/js/api.js"></script>
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/memory.js"></script>
+  <script src="/static/js/chips.js"></script>
   <script src="/static/js/documents.js"></script>
 </body>
 </html>

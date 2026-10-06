@@ -94,13 +94,21 @@ async def _iter_display_sse(text: str):
         await asyncio.sleep(0.02)
 
 
-async def _run_agent(master_graph: Any, question: str, user_id: str, thread_id: str) -> dict[str, Any]:
+async def _run_agent(
+    master_graph: Any,
+    question: str,
+    user_id: str,
+    thread_id: str,
+    doc_tags: list[str] | None = None,
+) -> dict[str, Any]:
     async with asyncio.timeout(60):
         result = await master_graph.ainvoke(
             {
                 "query": question,
                 "user_id": user_id,
                 "thread_id": thread_id,
+                # Always set so a previous turn's tags cannot leak via the checkpoint.
+                "doc_tags": list(doc_tags or []),
                 "messages": [HumanMessage(content=question)],
                 "iterations": 0,
                 "max_iterations": 2,
@@ -163,6 +171,7 @@ async def chat(
     ensure_session_owner(body.session_id, current_user.id)
     thread_id = body.session_id or generate_new_session_id()
     user_id = current_user.id
+    doc_tags = list(body.tags or [])
 
     async def event_generator():
         # Send headers immediately so the UI does not sit on a pending POST
@@ -170,9 +179,9 @@ async def chat(
         yield ": keepalive\n\n"
 
         try:
-            # Redis response cache: key = user_id + query hash.
+            # Redis response cache: key = user_id + query hash + sorted tags.
             # Check before the graph so a hit does not load models.
-            cached_answer = get_cached_answer(user_id, question)
+            cached_answer = get_cached_answer(user_id, question, doc_tags)
             if cached_answer:
                 logger.info("response_cache hit user_id=%s", user_id)
                 inc_chat("cache")
@@ -198,7 +207,9 @@ async def chat(
                 return
 
             master_graph = await get_master_agent_graph()
-            agent_result = await _run_agent(master_graph, question, user_id, thread_id)
+            agent_result = await _run_agent(
+                master_graph, question, user_id, thread_id, doc_tags
+            )
             context = _context_from_agent(agent_result)
             llm = get_llm()
             pieces: list[str] = []
@@ -259,7 +270,7 @@ async def chat(
                     yield frame
 
             if agent_result.get("input_guardrail_passed", True):
-                set_cached_answer(user_id, question, full_answer)
+                set_cached_answer(user_id, question, full_answer, doc_tags)
             inc_chat("ok")
             audit_event(
                 "chat.done",

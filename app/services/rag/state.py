@@ -14,6 +14,7 @@ class RAGState(TypedDict, total=False):
     retry_count: int            # number of retrieve-rewrite loops so far
     output_retry_count: int     # number of output-guardrail retries
     user_id: str                # authenticated user ID — used for metadata filtering
+    doc_tags: list[str]         # user-chosen document tags — AND-filtered with user_id
     chat_history: Annotated[list[BaseMessage], add_messages]  # HumanMessage / AIMessage objects
     long_term_memories: list[Any] # retrieved facts about the user
     skip_generate: bool         # retrieval-only invoke (streaming path)

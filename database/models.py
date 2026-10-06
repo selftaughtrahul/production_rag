@@ -37,6 +37,8 @@ class Document(Base):
     )
     file_name: Mapped[str] = mapped_column(String, nullable=False)
     file_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    # JSON-encoded list of user tags; mirrored onto every chunk as metadata.tags
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp()
     )

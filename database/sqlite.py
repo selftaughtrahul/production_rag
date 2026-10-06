@@ -83,4 +83,5 @@ def init_db() -> None:
         tables=[User.__table__, Document.__table__, MemoryRecord.__table__],
     )
     _ensure_column("documents", "file_path", "TEXT")
+    _ensure_column("documents", "tags", "TEXT")
     logger.info("SQLite schema ready at %s (users, documents, user_memories).", CHECKPOINT_DB_PATH)

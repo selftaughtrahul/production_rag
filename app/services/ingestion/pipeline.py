@@ -35,7 +35,14 @@ class IngestionPipeline:
         self.embedder = embedder
         self.vector_store = vector_store
 
-    def ingest(self,source: str,document_id: str,filename: str,user_id: str) -> dict[str, Any]:
+    def ingest(
+        self,
+        source: str,
+        document_id: str,
+        filename: str,
+        user_id: str,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Run the full ingestion pipeline for a single document.
 
@@ -45,23 +52,29 @@ class IngestionPipeline:
             filename:    Original filename uploaded by the user.
             user_id:     ID of the authenticated user — stored on every chunk
                          to enable per-user metadata filtering at retrieval time.
+            tags:        User-supplied labels copied onto every chunk as
+                         ``metadata.tags`` for query-time filtering.
 
         Returns:
             dict with document_id, filename, user_id, chunks_count.
         """
         document = self.loader.load(source)
+        tags = list(tags or [])
 
         document_metadata = {
             **document.metadata,
             "document_id": document_id,
             "filename": filename,
             "user_id": user_id,
+            "tags": tags,
         }
 
         cleaned_text = self.cleaner.clean(document.text)
         chunks = self.chunker.chunk(cleaned_text, metadata=document_metadata)
 
+        # System fields are written last so user tags can never override them.
         for index, chunk in enumerate(chunks):
+            chunk.metadata["tags"] = tags
             chunk.metadata["document_id"] = document_id
             chunk.metadata["filename"] = filename
             chunk.metadata["user_id"] = user_id
@@ -84,6 +97,7 @@ class IngestionPipeline:
             "document_id": document_id,
             "filename": filename,
             "user_id": user_id,
+            "tags": tags,
             "chunks_count": len(chunks),
         }
 
