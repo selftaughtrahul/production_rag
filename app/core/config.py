@@ -59,6 +59,19 @@ def _env_flag(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
+DOCUMENT_PARSER_CHOICES = frozenset({"existing", "docling", "unstructured", "auto"})
+
+
+def _document_parser() -> str:
+    """Return DOCUMENT_PARSER; refuse values the ingestion selector cannot route."""
+    value = os.getenv("DOCUMENT_PARSER", "existing").strip().lower() or "existing"
+    if value not in DOCUMENT_PARSER_CHOICES:
+        raise ValueError(
+            f"DOCUMENT_PARSER must be one of {sorted(DOCUMENT_PARSER_CHOICES)}, got {value!r}"
+        )
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     
@@ -116,6 +129,9 @@ class Settings:
     memory_compression_threshold: int
     memory_hard_limit: int
     keep_recent_messages: int
+
+    # ── Document parsing ──────────────────────
+    document_parser: str
 
 
     @classmethod
@@ -183,6 +199,7 @@ class Settings:
             memory_compression_threshold=int(os.getenv("MEMORY_COMPRESSION_THRESHOLD", "16000")),
             memory_hard_limit=int(os.getenv("MEMORY_HARD_LIMIT", "20000")),
             keep_recent_messages=int(os.getenv("KEEP_RECENT_MESSAGES", "6")),
+            document_parser=_document_parser(),
         )
 
     def local_model_path(self, model: str) -> str:

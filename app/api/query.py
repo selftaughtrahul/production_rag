@@ -23,7 +23,6 @@ from app.api.session_access import (
 )
 from app.core.audit import audit_event
 from app.core.exceptions import LLMUnavailableError
-from app.core.langfuse_tracer import trace_chat
 from app.core.metrics import inc_chat
 from app.core.rate_limit import CHAT_LIMIT, limiter
 from app.models.schemas import ChatRequest, UserInDB
@@ -160,11 +159,6 @@ async def chat(
                     session_id=thread_id,
                     data={"outcome": "cache"},
                 )
-                trace_chat(
-                    user_id=user_id,
-                    session_id=thread_id,
-                    outcome="cache",
-                )
                 yield _sse({"type": "token", "content": cached_answer})
                 yield _sse(
                     {
@@ -251,15 +245,6 @@ async def chat(
                         for item in (agent_result.get("agent_trajectory") or [])
                     ],
                 },
-            )
-            trace_chat(
-                user_id=user_id,
-                session_id=thread_id,
-                outcome="ok",
-                agent_names=[
-                    str(item.get("agent_name"))
-                    for item in (agent_result.get("agent_trajectory") or [])
-                ],
             )
 
             yield _sse(

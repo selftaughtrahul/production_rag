@@ -5,13 +5,12 @@ alwaysApply: true
 
 # basic_rag
 
-Stack: FastAPI (`main.py`) + Streamlit (`frontend/`) + LangGraph RAG + Chroma + SQLite FTS5 + JWT.
+Stack: FastAPI (`main.py`) + LangGraph RAG + Chroma + SQLite FTS5 + JWT.
 
 Do not change unless the task says so:
 - Chat: `POST /chat/`, SSE events `token` / `done`
 - One pipeline only: multi-agent supervisor over hybrid retrieval. No mode switch, no basic-RAG path
 - Session ids stay `session_<uuid>`
-- Streamlit chat UX
 
 Work rules:
 - Edit existing files; do not invent paths, class names, or deps

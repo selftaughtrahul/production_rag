@@ -20,7 +20,7 @@ from app.guardrails.output.grounding import TokenOverlapGroundingEvaluator
 from app.guardrails.output_service import OutputGuardrailService
 from app.services.ingestion.chunker import ChunkerService, LangChainRecursiveStrategy
 from app.services.ingestion.data_cleaning import DataCleaningLibrary
-from app.services.ingestion.document_loader import DocumentLoaderLibrary
+from app.services.ingestion.document_loader import ParserSelector
 from app.services.ingestion.embedding import EmbeddingService, HuggingFaceEmbeddingProvider
 from app.services.ingestion.pipeline import IngestionPipeline
 from app.services.llm.claude import ClaudeService
@@ -128,11 +128,18 @@ def build_components() -> RAGComponents:
     )
 
 
+@lru_cache(maxsize=4)
+def get_document_parser(mode: str) -> ParserSelector:
+    """One selector per DOCUMENT_PARSER mode so Docling's converter loads once."""
+    logger.info("Document parser mode: %s", mode)
+    return ParserSelector(mode=mode)
+
+
 def build_ingestion_pipeline(source: str) -> IngestionPipeline:
     settings = Settings.from_environment()
     components = build_components()
     return IngestionPipeline(
-        loader=DocumentLoaderLibrary(source=source),
+        loader=get_document_parser(settings.document_parser),
         cleaner=DataCleaningLibrary(),
         chunker=ChunkerService(
             strategy=LangChainRecursiveStrategy(

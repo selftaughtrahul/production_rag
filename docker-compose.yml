@@ -54,22 +54,6 @@ services:
       redis:
         condition: service_healthy
 
-  ui:
-    build: .
-    container_name: basic_rag_ui
-    command: streamlit run frontend/app.py --server.port 8002 --server.address 0.0.0.0 --server.headless true
-    restart: unless-stopped
-    networks:
-      - basic_rag
-    ports:
-      - "8002:8002"
-    env_file:
-      - .env
-    environment:
-      API_BASE_URL: http://api:8000
-    depends_on:
-      - api
-
   prometheus:
     image: prom/prometheus:v2.55.1
     container_name: basic_rag_prometheus
