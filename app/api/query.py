@@ -71,6 +71,29 @@ def _sse(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
+def _display_tokens(text: str) -> list[str]:
+    """Break a finished string into word-sized SSE chunks."""
+    if not text:
+        return []
+    chunks: list[str] = []
+    current: list[str] = []
+    for char in text:
+        current.append(char)
+        if char.isspace():
+            chunks.append("".join(current))
+            current = []
+    if current:
+        chunks.append("".join(current))
+    return chunks
+
+
+async def _iter_display_sse(text: str):
+    """Yield token SSE frames slowly enough for the UI to paint each word."""
+    for part in _display_tokens(text):
+        yield _sse({"type": "token", "content": part})
+        await asyncio.sleep(0.02)
+
+
 async def _run_agent(master_graph: Any, question: str, user_id: str, thread_id: str) -> dict[str, Any]:
     async with asyncio.timeout(60):
         result = await master_graph.ainvoke(
@@ -159,7 +182,8 @@ async def chat(
                     session_id=thread_id,
                     data={"outcome": "cache"},
                 )
-                yield _sse({"type": "token", "content": cached_answer})
+                async for frame in _iter_display_sse(cached_answer):
+                    yield frame
                 yield _sse(
                     {
                         "type": "done",
@@ -178,9 +202,9 @@ async def chat(
             context = _context_from_agent(agent_result)
             llm = get_llm()
             pieces: list[str] = []
+            streamed = False
             if agent_result.get("direct_response"):
-                direct_answer = str(agent_result["answer"])
-                pieces.append(direct_answer)
+                pieces.append(str(agent_result["answer"]))
             else:
                 async for token in llm.generate_stream(
                     question=question,
@@ -190,6 +214,8 @@ async def chat(
                     if not token:
                         continue
                     pieces.append(token)
+                    streamed = True
+                    yield _sse({"type": "token", "content": token})
 
             full_answer = "".join(pieces).strip() or agent_result["answer"]
             rails = build_wired_output_guardrails()
@@ -211,7 +237,9 @@ async def chat(
                     session_id=thread_id,
                     data={"stage": "output_guardrail"},
                 )
-                yield _sse({"type": "token", "content": safe_answer})
+                if not streamed:
+                    async for frame in _iter_display_sse(safe_answer):
+                        yield frame
                 yield _sse(
                     {
                         "type": "done",
@@ -226,10 +254,9 @@ async def chat(
                 return
             if rail_result.metadata.get("anonymized_response"):
                 full_answer = rail_result.metadata["anonymized_response"]
-                pieces = [full_answer]
-
-            for token in pieces or [full_answer]:
-                yield _sse({"type": "token", "content": token})
+            if not streamed:
+                async for frame in _iter_display_sse(full_answer):
+                    yield frame
 
             if agent_result.get("input_guardrail_passed", True):
                 set_cached_answer(user_id, question, full_answer)

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
+from app.api.memory import router as memory_router
 from app.api.pages import WEB_ROOT, router as pages_router
 from app.api.query import router as chat_router
 from app.core.config import Settings
@@ -84,6 +85,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
+app.include_router(memory_router)
 # Frontend pages go after the API routers so they never shadow an API path.
 app.include_router(pages_router)
 app.mount("/static", StaticFiles(directory=WEB_ROOT), name="static")

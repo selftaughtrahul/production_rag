@@ -54,6 +54,56 @@ class UserInDB(BaseModel):
     is_active: bool
 
 
+MemoryType = Literal[
+    "personal",
+    "professional",
+    "technical",
+    "preference",
+    "project",
+    "goal",
+    "general",
+    "semantic",
+    "episodic",
+]
+
+
+class MemoryItem(BaseModel):
+    id: str
+    memory: str
+    memory_type: str
+    importance: float
+
+
+class MemoryCreate(BaseModel):
+    memory: str
+    memory_type: MemoryType = "general"
+
+    @field_validator("memory")
+    @classmethod
+    def memory_text(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("Memory cannot be empty")
+        if len(text) > 500:
+            raise ValueError("Memory must be 500 characters or fewer")
+        return text
+
+
+class MemoryUpdate(BaseModel):
+    memory: str
+    memory_type: MemoryType
+
+    @field_validator("memory")
+    @classmethod
+    def memory_text(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("Memory cannot be empty")
+        if len(text) > 500:
+            raise ValueError("Memory must be 500 characters or fewer")
+        return text
+
+
 # ─────────────────────────────────────────────────────────────
 # Query schema
 # ─────────────────────────────────────────────────────────────

@@ -198,25 +198,31 @@
       body.session_id = sessionId;
     }
 
+    var seen = "";
+    $answer.addClass("is-streaming");
     return App.api.stream("/chat/", body, function (event) {
       if (!event || !event.type) {
         return;
       }
       if (event.type === "token") {
-        $answer.append(document.createTextNode(event.content || ""));
+        seen += event.content || "";
+        $answer.text(seen);
         $("#thread").scrollTop($("#thread")[0].scrollHeight);
       } else if (event.type === "done") {
         sessionId = event.session_id || sessionId;
-        if (event.answer) {
+        $answer.removeClass("is-streaming");
+        if (event.answer && event.answer !== seen) {
           $answer.text(event.answer);
         }
         $("#chat-title").text(titleFrom(question));
         refreshList();
       } else if (event.type === "error") {
+        $answer.removeClass("is-streaming");
         $answer.text(event.error || "Query could not be completed.");
       }
     }).catch(function (err) {
       var message = (err && err.message) || "Query could not be completed.";
+      $answer.removeClass("is-streaming");
       $answer.text(message);
       showAlert(message);
     }).finally(function () {
