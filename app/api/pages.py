@@ -16,6 +16,7 @@ _PAGES: dict[str, str] = {
     "/login": "login.html",
     "/dashboard": "dashboard.html",
     "/app": "chat.html",
+    "/files": "documents.html",
 }
 
 

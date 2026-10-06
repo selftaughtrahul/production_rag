@@ -242,9 +242,6 @@
     newChat();
 
     $("#new-chat").on("click", newChat);
-    $("#toggle-sidebar").on("click", function () {
-      $("#sidebar").toggleClass("is-open");
-    });
 
     $("#conversation-list").on("click", ".gpt-conv", function (event) {
       if ($(event.target).closest("[data-delete]").length) {

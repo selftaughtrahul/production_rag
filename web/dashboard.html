@@ -7,21 +7,30 @@
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body data-page="dashboard" class="is-loading">
-  <header class="topbar">
-    <span class="brand">RAG Console</span>
-    <nav>
-      <a href="/app">Chat</a>
-      <a href="/dashboard" class="is-active">Dashboard</a>
-    </nav>
-    <span class="spacer"></span>
-    <button type="button" class="user profile-btn" id="username"></button>
-    <button type="button" class="btn ghost" id="logout">Log out</button>
-  </header>
+  <div class="gpt-shell">
+    <aside class="gpt-sidebar" id="sidebar">
+      <nav class="gpt-nav" aria-label="Sections">
+        <a href="/app">Chat</a>
+        <a href="/dashboard" class="is-active">Dashboard</a>
+        <a href="/files">Documents</a>
+      </nav>
+      <div class="gpt-sidebar-foot">
+        <button type="button" class="user profile-btn" id="username"></button>
+        <button type="button" class="btn ghost" id="logout">Log out</button>
+      </div>
+    </aside>
 
-  <main class="page">
-    <h1>Dashboard</h1>
-    <p class="sub">Live metrics arrive in the next step.</p>
-  </main>
+    <section class="gpt-main">
+      <header class="gpt-top">
+        <button type="button" class="gpt-menu" id="toggle-sidebar" aria-label="Toggle sidebar">☰</button>
+        <span class="gpt-title">Dashboard</span>
+      </header>
+      <div class="gpt-page">
+        <h1>Dashboard</h1>
+        <p class="sub">Live metrics arrive in the next step.</p>
+      </div>
+    </section>
+  </div>
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="/static/js/api.js"></script>

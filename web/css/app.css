@@ -248,14 +248,55 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .memory-delete { color: var(--danger); }
 
-.page { padding: 24px; max-width: 1100px; margin: 0 auto; }
+.page,
+.gpt-page { padding: 24px; max-width: 1100px; }
 
-.page h1 { margin: 0 0 8px; font-size: 22px; }
+.page { margin: 0 auto; }
 
-.page .sub { margin: 0; color: var(--muted); }
+.page h1,
+.gpt-page h1 { margin: 0 0 8px; font-size: 22px; }
 
-/* ChatGPT-style shell */
-body[data-page="chat"] {
+.page .sub,
+.gpt-page .sub { margin: 0 0 16px; color: var(--muted); }
+
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.doc-item,
+.doc-empty {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.doc-empty { color: var(--muted); }
+
+.doc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-when {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Shared shell: nav stays; chat threads only appear on Chat */
+body[data-page="chat"],
+body[data-page="dashboard"],
+body[data-page="documents"] {
   overflow: hidden;
 }
 
@@ -276,6 +317,37 @@ body[data-page="chat"] {
   background: #171717;
   color: #ececec;
   padding: 12px;
+}
+
+.gpt-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.gpt-nav a {
+  display: block;
+  padding: 8px 10px;
+  color: #ececec;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.gpt-nav a:hover,
+.gpt-nav a.is-active {
+  background: #262626;
+  text-decoration: none;
+}
+
+.gpt-nav a.is-active { font-weight: 600; }
+
+.gpt-threads {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .gpt-new {
@@ -356,6 +428,7 @@ body[data-page="chat"] {
 .gpt-sidebar-foot {
   display: grid;
   gap: 8px;
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid #3f3f46;
 }
@@ -375,6 +448,12 @@ body[data-page="chat"] {
   display: flex;
   flex-direction: column;
   background: #fff;
+}
+
+.gpt-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .gpt-top {

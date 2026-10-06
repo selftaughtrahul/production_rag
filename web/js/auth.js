@@ -85,6 +85,12 @@
     });
   }
 
+  function bindSidebar() {
+    $("#toggle-sidebar").on("click", function () {
+      $("#sidebar").toggleClass("is-open");
+    });
+  }
+
   var pages = {
     gate: function () {
       currentUser()
@@ -106,7 +112,21 @@
         .done(function (user) {
           $("#username").text(user.username);
           bindLogout();
+          bindSidebar();
           reveal();
+        })
+        .fail(function () { go(LOGIN); });
+    },
+    documents: function () {
+      currentUser()
+        .done(function (user) {
+          $("#username").text(user.username);
+          bindLogout();
+          bindSidebar();
+          reveal();
+          if (typeof App.startDocuments === "function") {
+            App.startDocuments();
+          }
         })
         .fail(function () { go(LOGIN); });
     },
@@ -115,6 +135,7 @@
         .done(function (user) {
           $("#username").text(user.username);
           bindLogout();
+          bindSidebar();
           reveal();
           if (typeof App.startChat === "function") {
             App.startChat();

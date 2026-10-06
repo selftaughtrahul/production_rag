@@ -9,11 +9,17 @@
 <body data-page="chat" class="is-loading">
   <div class="gpt-shell">
     <aside class="gpt-sidebar" id="sidebar">
-      <button type="button" class="gpt-new" id="new-chat">New chat</button>
-      <div class="gpt-history-label">Chats</div>
-      <nav class="gpt-history" id="conversation-list" aria-label="Conversation history"></nav>
-      <div class="gpt-sidebar-foot">
+      <nav class="gpt-nav" aria-label="Sections">
+        <a href="/app" class="is-active">Chat</a>
         <a href="/dashboard">Dashboard</a>
+        <a href="/files">Documents</a>
+      </nav>
+      <div class="gpt-threads">
+        <button type="button" class="gpt-new" id="new-chat">New chat</button>
+        <div class="gpt-history-label">Chats</div>
+        <nav class="gpt-history" id="conversation-list" aria-label="Conversation history"></nav>
+      </div>
+      <div class="gpt-sidebar-foot">
         <button type="button" class="user profile-btn" id="username"></button>
         <button type="button" class="btn ghost" id="logout">Log out</button>
       </div>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documents · RAG Console</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body data-page="documents" class="is-loading">
+  <div class="gpt-shell">
+    <aside class="gpt-sidebar" id="sidebar">
+      <nav class="gpt-nav" aria-label="Sections">
+        <a href="/app">Chat</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/files" class="is-active">Documents</a>
+      </nav>
+      <div class="gpt-sidebar-foot">
+        <button type="button" class="user profile-btn" id="username"></button>
+        <button type="button" class="btn ghost" id="logout">Log out</button>
+      </div>
+    </aside>
+
+    <section class="gpt-main">
+      <header class="gpt-top">
+        <button type="button" class="gpt-menu" id="toggle-sidebar" aria-label="Toggle sidebar">☰</button>
+        <span class="gpt-title">Documents</span>
+      </header>
+      <div class="gpt-page">
+        <h1>Documents</h1>
+        <p class="sub">Files you have uploaded.</p>
+        <div class="alert" id="docs-alert" role="alert"></div>
+        <ul class="doc-list" id="doc-list"></ul>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/memory.js"></script>
+  <script src="/static/js/documents.js"></script>
+</body>
+</html>
