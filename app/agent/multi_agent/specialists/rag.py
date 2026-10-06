@@ -8,6 +8,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 
 from app.agent.multi_agent.state import AgentOutput, SupervisorState
+from app.prompts.specialist_prompts import RAG_NO_EVIDENCE_ANSWER
 from app.tools.execute import invoke_tool
 from app.tools.registry import ToolRegistry
 
@@ -53,6 +54,7 @@ class RAGSubGraphNode:
 
         answer = ""
         context = ""
+        sources: list[dict[str, Any]] = []
         if self.rag_graph:
             try:
                 rag_input = {
@@ -65,6 +67,7 @@ class RAGSubGraphNode:
                     "rewritten_question": None,
                     "documents": [],
                     "context": "",
+                    "sources": [],
                     "answer": "",
                     "documents_relevant": False,
                     "has_error": False,
@@ -77,9 +80,13 @@ class RAGSubGraphNode:
                 }
                 result = await self.rag_graph.ainvoke(rag_input, config=config)
                 context = result.get("context", "")
+                sources = list(result.get("sources") or [])
                 answer = result.get("answer") or result.get("generation", "")
                 if context and not answer:
                     answer = "Retrieved internal documents."
+                if not context and not result.get("has_error"):
+                    # Retrieval ran and nothing covers the question: refuse, no model call.
+                    return self._result(RAG_NO_EVIDENCE_ANSWER, context="", direct=True)
             except Exception as exc:
                 logger.error("RAG graph invocation failed: %s", exc, exc_info=True)
 
@@ -96,13 +103,20 @@ class RAGSubGraphNode:
                     )
                 )
         return self._result(
-            answer or "No relevant internal documents found.",
+            answer or RAG_NO_EVIDENCE_ANSWER,
             context=context,
             direct=not bool(context),
+            sources=sources,
         )
 
     @staticmethod
-    def _result(answer: str, *, context: str, direct: bool = False) -> dict[str, Any]:
+    def _result(
+        answer: str,
+        *,
+        context: str,
+        direct: bool = False,
+        sources: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         return {
             "messages": [
                 HumanMessage(content=f"[RAG Specialist]: {answer}", name="rag_agent")
@@ -111,7 +125,11 @@ class RAGSubGraphNode:
                 AgentOutput(
                     agent_name="rag_agent",
                     result=answer,
-                    metadata={"context": context, "direct_response": direct},
+                    metadata={
+                        "context": context,
+                        "direct_response": direct,
+                        "sources": list(sources or []),
+                    },
                 )
             ],
         }

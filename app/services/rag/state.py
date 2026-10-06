@@ -9,6 +9,7 @@ class RAGState(TypedDict, total=False):
     rewritten_question: str     # query rewritten by LLM for better retrieval
     documents: list[Any]        # retrieved + reranked chunks
     context: str                # formatted context string passed to LLM
+    sources: list[dict[str, Any]]  # numbered citation targets for the context blocks
     answer: str                 # final answer from LLM
     documents_relevant: bool    # grading result: True → generate, False → rewrite
     retry_count: int            # number of retrieve-rewrite loops so far

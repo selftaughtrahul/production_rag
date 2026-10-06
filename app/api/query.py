@@ -26,6 +26,7 @@ from app.core.exceptions import LLMUnavailableError
 from app.core.metrics import inc_chat
 from app.core.rate_limit import CHAT_LIMIT, limiter
 from app.models.schemas import ChatRequest, UserInDB
+from app.prompts.specialist_prompts import RAG_NO_EVIDENCE_ANSWER
 from app.services.auth.dependencies import get_current_user
 from app.services.cache.response_cache import get_cached_answer, set_cached_answer
 
@@ -135,7 +136,19 @@ async def _run_agent(
         "long_term_memories": result.get("long_term_memories") or [],
         "direct_response": direct_response,
         "input_guardrail_passed": result.get("input_guardrail_passed", True),
+        "sources": _sources_from_trajectory(trajectory),
     }
+
+
+def _sources_from_trajectory(trajectory: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Citation targets ({index, filename, page, chunk_id}) emitted by the RAG specialist."""
+    sources: list[dict[str, Any]] = []
+    for item in trajectory:
+        meta = item.get("metadata") or {}
+        for source in meta.get("sources") or []:
+            if isinstance(source, dict):
+                sources.append(source)
+    return sources
 
 
 def _context_from_agent(agent_result: dict[str, Any]) -> str:
@@ -202,6 +215,7 @@ async def chat(
                         "iterations": 0,
                         "agent_trajectory": [],
                         "guardrail_metadata": {"response_cache": "hit"},
+                        "sources": [],
                     }
                 )
                 return
@@ -260,6 +274,7 @@ async def chat(
                         "iterations": agent_result["iterations"],
                         "agent_trajectory": agent_result["agent_trajectory"],
                         "guardrail_metadata": guardrail_metadata,
+                        "sources": [],
                     }
                 )
                 return
@@ -269,7 +284,11 @@ async def chat(
                 async for frame in _iter_display_sse(full_answer):
                     yield frame
 
-            if agent_result.get("input_guardrail_passed", True):
+            # Do not cache a refusal: the user may upload the missing document next.
+            if (
+                agent_result.get("input_guardrail_passed", True)
+                and full_answer != RAG_NO_EVIDENCE_ANSWER
+            ):
                 set_cached_answer(user_id, question, full_answer, doc_tags)
             inc_chat("ok")
             audit_event(
@@ -294,6 +313,7 @@ async def chat(
                     "iterations": agent_result["iterations"],
                     "agent_trajectory": agent_result["agent_trajectory"],
                     "guardrail_metadata": guardrail_metadata,
+                    "sources": agent_result.get("sources") or [],
                 }
             )
         except LLMUnavailableError as exc:

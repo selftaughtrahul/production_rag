@@ -74,6 +74,38 @@
     return $row;
   }
 
+  /* "[1] handbook.pdf, p. 3 · [2] policy.md" from the done event's sources. */
+  function sourcesLine(sources) {
+    var seen = {};
+    var labels = [];
+    (sources || []).forEach(function (src) {
+      if (!src || !src.filename) {
+        return;
+      }
+      var key = src.filename + "|" + (src.page == null ? "" : src.page);
+      if (seen[key]) {
+        return;
+      }
+      seen[key] = true;
+      var label = "[" + src.index + "] " + src.filename;
+      if (src.page != null) {
+        label += ", p. " + src.page;
+      }
+      labels.push(label);
+    });
+    return labels.join(" · ");
+  }
+
+  function appendSources($bubble, sources) {
+    var text = sourcesLine(sources);
+    if (!text) {
+      return;
+    }
+    $bubble.closest(".gpt-row").append(
+      $('<div class="gpt-sources"></div>').attr("title", "Sources").text(text)
+    );
+  }
+
   function clearThread() {
     $("#thread").empty().append(emptyState());
     $("#chat-title").text("New chat");
@@ -219,6 +251,7 @@
         if (event.answer && event.answer !== seen) {
           $answer.text(event.answer);
         }
+        appendSources($answer, event.sources);
         $("#chat-title").text(titleFrom(question));
         refreshList();
       } else if (event.type === "error") {

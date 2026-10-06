@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.core.exceptions import handle_node_error
 from app.memory.persist import persist_from_turn
 from app.memory.service import MemoryService
+from app.prompts.specialist_prompts import RAG_NO_EVIDENCE_ANSWER
 from database.sqlite import SessionLocal
 from .state import RAGState
 
@@ -198,10 +199,13 @@ class RAGNodes:
         documents = state.get("documents", [])
 
         if not documents:
-            return {"context": ""}
+            return {"context": "", "sources": []}
 
-        context = self.context_builder.build(documents)
-        return {"context": context}
+        built = self.context_builder.build(documents)
+        return {
+            "context": built.text,
+            "sources": [source.to_dict() for source in built.sources],
+        }
 
     # ──────────────────────────────────────────────────────────────────
     # Node 6 — Load long-term memory
@@ -236,6 +240,16 @@ class RAGNodes:
 
         question = state["question"]
         context = state.get("context", "")
+
+        if not context.strip():
+            # Nothing retrieved survived dedupe/budget: refuse without a model call.
+            return {
+                "answer": RAG_NO_EVIDENCE_ANSWER,
+                "chat_history": [
+                    HumanMessage(content=question),
+                    AIMessage(content=RAG_NO_EVIDENCE_ANSWER),
+                ],
+            }
 
         # Convert LangChain messages → plain dicts for Claude API
         history_dicts = [
