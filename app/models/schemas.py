@@ -249,6 +249,37 @@ class DocumentUpdate(BaseModel):
 # Multi-Agent schemas
 # ─────────────────────────────────────────────────────────────
 
+class GpuStatus(BaseModel):
+    available: bool
+    device: str
+    name: str | None = None
+    utilization_percent: int | None = None
+    memory_used_mb: int | None = None
+    memory_total_mb: int | None = None
+    temperature_c: int | None = None
+
+
+class QueueItem(BaseModel):
+    id: str
+    file_name: str
+    status: DocumentStatus
+
+
+class QueueStatus(BaseModel):
+    broker_ok: bool
+    waiting: int | None = None
+    workers: int | None = None
+    active: int | None = None
+    processing: int = 0
+    failed: int = 0
+    items: list[QueueItem] = Field(default_factory=list)
+
+
+class MonitorStatus(BaseModel):
+    gpu: GpuStatus
+    queue: QueueStatus
+
+
 class ChatResponse(BaseModel):
     success: bool = True
     session_id: str

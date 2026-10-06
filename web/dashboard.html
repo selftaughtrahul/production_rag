@@ -27,7 +27,22 @@
       </header>
       <div class="gpt-page">
         <h1>Dashboard</h1>
-        <p class="sub">Live metrics arrive in the next step.</p>
+        <p class="sub">GPU load and the document ingest queue, refreshed every few seconds.</p>
+        <div class="alert" id="monitor-error" role="alert"></div>
+        <div class="monitor-grid">
+          <section class="monitor-card" aria-labelledby="gpu-heading">
+            <h2 id="gpu-heading">GPU</h2>
+            <p class="monitor-state" id="gpu-state">Checking…</p>
+            <dl class="monitor-stats" id="gpu-stats"></dl>
+          </section>
+          <section class="monitor-card" aria-labelledby="queue-heading">
+            <h2 id="queue-heading">Queue</h2>
+            <p class="monitor-state" id="queue-state">Checking…</p>
+            <dl class="monitor-stats" id="queue-stats"></dl>
+            <ul class="monitor-list" id="queue-list"></ul>
+          </section>
+        </div>
+        <p class="monitor-updated" id="monitor-updated"></p>
       </div>
     </section>
   </div>
@@ -36,5 +51,6 @@
   <script src="/static/js/api.js"></script>
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/memory.js"></script>
+  <script src="/static/js/dashboard.js"></script>
 </body>
 </html>

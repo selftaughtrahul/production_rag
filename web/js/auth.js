@@ -114,6 +114,9 @@
           bindLogout();
           bindSidebar();
           reveal();
+          if (typeof App.startDashboard === "function") {
+            App.startDashboard();
+          }
         })
         .fail(function () { go(LOGIN); });
     },
