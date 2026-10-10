@@ -19,10 +19,7 @@ from database.sqlite import get_db
 _bearer = HTTPBearer(auto_error=True)
 
 
-def get_current_user(
-    creds: HTTPAuthorizationCredentials = Depends(_bearer),
-    db: Session = Depends(get_db),
-) -> UserInDB:
+def get_current_user(creds: HTTPAuthorizationCredentials = Depends(_bearer),db: Session = Depends(get_db)) -> UserInDB:
     """
     Decode JWT → look up user in MySQL → return UserInDB.
 

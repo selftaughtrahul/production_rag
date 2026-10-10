@@ -23,10 +23,12 @@ from app.core.metrics import render_prometheus
 from app.core.rate_limit import attach_rate_limiter
 from database.sqlite import init_db
 import time
+import pathlib
 
 setup_logger()
 logger = logging.getLogger(__name__)
 start_time = time.time()
+
 
 def _configure_hf_token() -> None:
     ''' Configure the Hugging Face token '''
@@ -82,15 +84,15 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+app.mount("/static", StaticFiles(directory=WEB_ROOT), name="static")
+
 
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
 app.include_router(memory_router)
 app.include_router(monitor_router)
-# Frontend pages go after the API routers so they never shadow an API path.
 app.include_router(pages_router)
-app.mount("/static", StaticFiles(directory=WEB_ROOT), name="static")
 attach_rate_limiter(app)
 
 

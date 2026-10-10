@@ -3,9 +3,7 @@
 import asyncio
 import json
 import logging
-import uuid
 from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
@@ -29,149 +27,27 @@ from app.models.schemas import ChatRequest, UserInDB
 from app.prompts.specialist_prompts import RAG_NO_EVIDENCE_ANSWER
 from app.services.auth.dependencies import get_current_user
 from app.services.cache.response_cache import get_cached_answer, set_cached_answer
-
+from .helper import (
+    _iter_display_sse,
+    _sse,
+    _build_graph_config,
+    generate_new_session_id,
+    _run_agent,
+    _context_from_agent,
+)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
 
-def generate_new_session_id() -> str:
-    return f"session_{uuid.uuid4()}"
 
-
-def _chat_run_name(question: str | None) -> str:
-    """LangSmith lists a run by name, so the name is the user question."""
-    label = " ".join((question or "").split())
-    if not label:
-        return "chat"
-    if len(label) > 120:
-        return label[:117] + "..."
-    return label
-
-
-def _build_graph_config(
-    thread_id: str,
-    user_id: str,
-    question: str | None = None,
-) -> dict[str, Any]:
-    return {
-        "configurable": {"thread_id": thread_id},
-        "run_name": _chat_run_name(question),
-        "tags": ["chat"],
-        "metadata": {
-            "source": "fastapi",
-            "user_id": user_id,
-            "session_id": thread_id,
-            "thread_id": thread_id,
-        },
-    }
-
-
-def _sse(payload: dict[str, Any]) -> str:
-    return f"data: {json.dumps(payload)}\n\n"
-
-
-def _display_tokens(text: str) -> list[str]:
-    """Break a finished string into word-sized SSE chunks."""
-    if not text:
-        return []
-    chunks: list[str] = []
-    current: list[str] = []
-    for char in text:
-        current.append(char)
-        if char.isspace():
-            chunks.append("".join(current))
-            current = []
-    if current:
-        chunks.append("".join(current))
-    return chunks
-
-
-async def _iter_display_sse(text: str):
-    """Yield token SSE frames slowly enough for the UI to paint each word."""
-    for part in _display_tokens(text):
-        yield _sse({"type": "token", "content": part})
-        await asyncio.sleep(0.02)
-
-
-async def _run_agent(
-    master_graph: Any,
-    question: str,
-    user_id: str,
-    thread_id: str,
-    doc_tags: list[str] | None = None,
-) -> dict[str, Any]:
-    async with asyncio.timeout(60):
-        result = await master_graph.ainvoke(
-            {
-                "query": question,
-                "user_id": user_id,
-                "thread_id": thread_id,
-                # Always set so a previous turn's tags cannot leak via the checkpoint.
-                "doc_tags": list(doc_tags or []),
-                "messages": [HumanMessage(content=question)],
-                "iterations": 0,
-                "max_iterations": 2,
-            },
-            config=_build_graph_config(thread_id, user_id, question),
-        )
-    trajectory = [
-        {
-            "agent_name": out.agent_name,
-            "result": out.result,
-            "metadata": out.metadata,
-        }
-        for out in result.get("agent_outputs", [])
-    ]
-    direct_response = any(
-        bool((item["metadata"] or {}).get("direct_response"))
-        for item in trajectory
-    )
-    return {
-        "answer": result.get("final_response") or "Unable to synthesize answer.",
-        "iterations": result.get("iterations", 1),
-        "agent_trajectory": trajectory,
-        "guardrail_metadata": result.get("guardrail_metadata", {}),
-        "long_term_memories": result.get("long_term_memories") or [],
-        "direct_response": direct_response,
-        "input_guardrail_passed": result.get("input_guardrail_passed", True),
-        "sources": _sources_from_trajectory(trajectory),
-    }
-
-
-def _sources_from_trajectory(trajectory: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Citation targets ({index, filename, page, chunk_id}) emitted by the RAG specialist."""
-    sources: list[dict[str, Any]] = []
-    for item in trajectory:
-        meta = item.get("metadata") or {}
-        for source in meta.get("sources") or []:
-            if isinstance(source, dict):
-                sources.append(source)
-    return sources
-
-
-def _context_from_agent(agent_result: dict[str, Any]) -> str:
-    """Build Claude context from specialist observations (RAG chunks, web)."""
-    parts: list[str] = []
-    for item in agent_result.get("agent_trajectory") or []:
-        meta = item.get("metadata") or {}
-        blob = (meta.get("context") or item.get("result") or "").strip()
-        if not blob:
-            continue
-        name = item.get("agent_name") or "agent"
-        parts.append(f"[{name}]\n{blob}")
-    return "\n\n".join(parts)
 
 
 @router.post("", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
 @router.post("/", summary="Chat (multi-agent orchestrator over hybrid retrieval)")
 @limiter.limit(CHAT_LIMIT)
-async def chat(
-    request: Request,
-    body: ChatRequest,
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depends(get_current_user)):
     """
     Single chat pipeline: the supervisor routes each turn to the RAG, web,
     or general specialist. The RAG specialist retrieves with dense + BM25 + RRF
@@ -351,16 +227,12 @@ async def chat(
 
 @router.get("/conversations", summary="List user conversations")
 async def list_conversations(current_user: UserInDB = Depends(get_current_user)):
-
     conversations = list_owned_conversations(current_user.id)
     return {"success": True, "sessions": conversations}
 
 
 @router.delete("/conversations/{session_id}", summary="Delete a conversation thread")
-async def delete_conversation(
-    session_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-):
+async def delete_conversation(session_id: str,current_user: UserInDB = Depends(get_current_user)):
     """Remove one owned chat thread and its nested RAG checkpoint."""
     if not session_id.startswith("session_") or ":" in session_id:
         raise HTTPException(status_code=404, detail="Conversation not found")

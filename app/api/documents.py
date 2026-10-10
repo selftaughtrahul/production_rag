@@ -3,12 +3,9 @@ Document management routes.
 
  
 """
-
 import asyncio
-import hashlib
 import json
 import logging
-import shutil
 from pathlib import Path
 from uuid import uuid4
 from celery.result import AsyncResult
@@ -20,9 +17,7 @@ from app.models.schemas import (
     DocumentDetailResponse,
     DocumentResponse,
     DocumentUpdate,
-    UserInDB,
-    normalize_metadata,
-    normalize_tags,
+    UserInDB
 )
 from app.services.auth.dependencies import get_current_user
 from app.services.ingestion.document_loader import UploadRejected, scan_saved_file, validate_upload_bytes
@@ -33,147 +28,22 @@ from app.core.config import Settings
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from .helper import (
+    _content_hash,
+    _find_duplicate,
+    _parse_metadata_form,
+    _parse_tags_form,
+    _save_upload,
+    _delete_stored_file,
+    _resolve_stored_file,
+    _stored_file_size,
+    _document_response,
+    _mark_failed,
+)
 settings = Settings.from_environment()
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Documents"])
-
-_DOCUMENTS_ROOT = Path("documents")
-
-
-def _content_hash(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
-
-
-def _parse_metadata_form(raw: str | None) -> dict[str, str]:
-    """Accept a JSON object or comma-separated key:value pairs."""
-    if not raw or not raw.strip():
-        return {}
-    try:
-        return normalize_metadata(raw)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-def _parse_tags_form(raw: str | None) -> list[str]:
-    """Accept a JSON array or a comma-separated string from the upload form."""
-    if not raw or not raw.strip():
-        return []
-    text = raw.strip()
-    if text.startswith("["):
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail="tags must be a JSON array") from exc
-        if not isinstance(parsed, list):
-            raise HTTPException(status_code=400, detail="tags must be a JSON array")
-        return normalize_tags(parsed)
-    return normalize_tags(text.split(","))
-
-
-def _row_tags(row: Document) -> list[str]:
-    """Decode the JSON tags column; tolerate legacy rows without tags."""
-    if not row.tags:
-        return []
-    try:
-        parsed = json.loads(row.tags)
-    except json.JSONDecodeError:
-        return []
-    return normalize_tags(parsed) if isinstance(parsed, list) else []
-
-
-def _row_metadata(row: Document) -> dict[str, str]:
-    if not row.custom_metadata:
-        return {}
-    try:
-        parsed = json.loads(row.custom_metadata)
-    except json.JSONDecodeError:
-        return {}
-    return normalize_metadata(parsed) if isinstance(parsed, dict) else {}
-
-
-def _document_response(row: Document, *, chunk_count: int, file_size: int | None) -> DocumentResponse:
-    status = row.status if row.status in {"processing", "ready", "failed"} else "ready"
-    return DocumentResponse(
-        id=row.id,
-        user_id=row.user_id,
-        file_name=row.file_name,
-        created_at=row.created_at,
-        tags=_row_tags(row),
-        metadata=_row_metadata(row),
-        file_size=file_size,
-        chunk_count=chunk_count,
-        status=status,
-        error_message=row.error_message,
-    )
-
-
-def _find_duplicate(db: Session, *, user_id: str, content_hash: str) -> Document | None:
-    return db.scalar(
-        select(Document).where(
-            Document.user_id == user_id,
-            Document.content_hash == content_hash,
-        )
-    )
-
-
-def _mark_failed(db: Session, row: Document, file_path: str | None) -> None:
-    row.status = "failed"
-    row.error_message = "Ingestion failed."
-    row.content_hash = None
-    _delete_stored_file(file_path)
-    db.commit()
-
-
-def _stored_file_size(file_path: str | None) -> int | None:
-    stored = _resolve_stored_file(file_path)
-    if stored is None or not stored.is_file():
-        return None
-    try:
-        return stored.stat().st_size
-    except OSError:
-        return None
-
-
-def _save_upload(file: UploadFile,content: bytes,*,user_id: str,document_id: str) -> str:
-    """Save the upload under documents/{user_id}/{document_id}{ext}."""
-    suffix = Path(file.filename or "upload").suffix
-    dest_dir = _DOCUMENTS_ROOT / user_id
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{document_id}{suffix}"
-    dest.write_bytes(content)
-    return str(dest)
-
-
-def _resolve_stored_file(file_path: str | None) -> Path | None:
-    """Return a path only if it exists under the documents directory."""
-    if not file_path:
-        return None
-
-    try:
-        resolved = Path(file_path).resolve()
-        root = _DOCUMENTS_ROOT.resolve()
-        if root not in resolved.parents:
-            return None
-        return resolved
-    except OSError:
-        return None
-
-
-def _delete_stored_file(file_path: str | None) -> None:
-    """Remove a stored upload only if it lives under the documents directory."""
-    resolved = _resolve_stored_file(file_path)
-    if resolved is None:
-        return
-
-    try:
-        resolved.unlink(missing_ok=True)
-        images = resolved.parent / f"{resolved.stem}_images"
-        if images.is_dir() and _DOCUMENTS_ROOT.resolve() in images.resolve().parents:
-            shutil.rmtree(images, ignore_errors=True)
-    except OSError:
-        logger.warning("Could not remove stored upload %s", resolved, exc_info=True)
-
 
 
 @router.get("/tasks/{task_id}", summary="Check background task status")
@@ -194,13 +64,7 @@ async def get_task_status(task_id: str,current_user: UserInDB = Depends(get_curr
     return response
 
 @router.post("/ingest", summary="Upload and ingest a document")
-async def ingest_document(
-    file: UploadFile = File(...),
-    tags: str | None = Form(default=None),
-    metadata: str | None = Form(default=None),
-    current_user: UserInDB = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(default=None),metadata: str | None = Form(default=None),current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
     """
     Upload a document and ingest it into the vector store.
 
@@ -342,10 +206,7 @@ async def ingest_document(
     }
 
 @router.get("/documents", response_model=List[DocumentResponse], summary="List user documents")
-async def list_documents(
-    current_user: UserInDB = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def list_documents(current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
     """List the user's documents with tags, file size, and stored chunk count."""
     rows = db.scalars(
         select(Document)
@@ -394,16 +255,8 @@ def _owned_document(db: Session, document_id: str, user_id: str) -> Document:
     return row
 
 
-@router.get(
-    "/documents/{document_id}",
-    response_model=DocumentDetailResponse,
-    summary="Show one document",
-)
-async def show_document(
-    document_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+@router.get("/documents/{document_id}",response_model=DocumentDetailResponse,summary="Show one document",)
+async def show_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
     """Return status, tags, custom metadata, and a short text preview."""
     row = _owned_document(db, document_id, current_user.id)
 
@@ -435,17 +288,8 @@ async def show_document(
     )
 
 
-@router.patch(
-    "/documents/{document_id}",
-    response_model=DocumentResponse,
-    summary="Update document tags and custom metadata",
-)
-async def update_document(
-    document_id: str,
-    body: DocumentUpdate,
-    current_user: UserInDB = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+@router.patch("/documents/{document_id}",response_model=DocumentResponse,summary="Update document tags and custom metadata")
+async def update_document(document_id: str,body: DocumentUpdate,current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
     """Save tag chips and custom metadata chips for one owned document."""
     row = _owned_document(db, document_id, current_user.id)
     if row.status == "processing":
@@ -491,21 +335,12 @@ async def update_document(
     )
 
 @router.get("/documents/download/{document_id}", summary="Download a document")
-async def get_document(
-    document_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def get_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
     """Download the original file for a document the user owns."""
     if not document_id.strip():
         raise HTTPException(status_code=400, detail="document_id is required")
 
-    row = db.scalar(
-        select(Document).where(
-            Document.id == document_id,
-            Document.user_id == current_user.id,
-        )
-    )
+    row = db.scalar(select(Document).where(Document.id == document_id,Document.user_id == current_user.id))
     if not row:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -516,11 +351,7 @@ async def get_document(
     return FileResponse(path=stored, filename=row.file_name)
 
 @router.delete("/documents/{document_id}", summary="Delete a document")
-async def delete_document(
-    document_id: str,
-    current_user: UserInDB = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def delete_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
     """
     Delete a document: its Qdrant points (dense + sparse vectors live on the
     same point), the stored upload, and the SQLite row.
@@ -529,12 +360,7 @@ async def delete_document(
     if not document_id.strip():
         raise HTTPException(status_code=400, detail="document_id is required")
 
-    row = db.scalar(
-        select(Document).where(
-            Document.id == document_id,
-            Document.user_id == current_user.id,
-        )
-    )
+    row = db.scalar(select(Document).where(Document.id == document_id,Document.user_id == current_user.id))
     if row is None:
         raise HTTPException(
             status_code=404,
