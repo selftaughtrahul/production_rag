@@ -261,9 +261,7 @@ def get_laya() -> LayaService | None:
 _tool_registry_instance: Optional[ToolRegistry] = None
 
 
-def get_tool_registry(
-    retriever: Retriever = Depends(get_hybrid_retriever),
-) -> ToolRegistry:
+def get_tool_registry( retriever: Retriever = Depends(get_hybrid_retriever)) -> ToolRegistry:
     """Dependency provider for the ToolRegistry instance."""
     global _tool_registry_instance
     if _tool_registry_instance is None:

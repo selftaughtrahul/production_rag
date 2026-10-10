@@ -124,10 +124,7 @@ def count_tokens(messages: list[BaseMessage]) -> int:
         return sum((len(text) + 3) // 4 for text in texts)
 
 
-def _split_recent(
-    messages: list[BaseMessage],
-    keep_recent: int,
-) -> tuple[list[BaseMessage], list[BaseMessage]]:
+def _split_recent(messages: list[BaseMessage],keep_recent: int) -> tuple[list[BaseMessage], list[BaseMessage]]:
     keep = max(keep_recent, 0)
     if keep == 0 or len(messages) <= keep:
         return [], list(messages)
@@ -156,11 +153,7 @@ async def should_compress_memory(
         return "KEEP", None, False
     if router is None or not hasattr(router, "predict"):
         decision = _fallback_decision(token_count, config.hard_limit)
-        logger.warning(
-            "Laya memory router unavailable; fallback decision=%s tokens=%s",
-            decision,
-            token_count,
-        )
+        logger.warning("Laya memory router unavailable; fallback decision=%s tokens=%s",decision,token_count)
         return decision, None, True
 
     state = (
@@ -196,12 +189,7 @@ async def should_compress_memory(
         return parsed.decision, confidence, False
     except Exception as exc:
         decision = _fallback_decision(token_count, config.hard_limit)
-        logger.warning(
-            "Laya memory decision failed (%s); fallback decision=%s tokens=%s",
-            exc,
-            decision,
-            token_count,
-        )
+        logger.warning("Laya memory decision failed (%s); fallback decision=%s tokens=%s",exc,decision,token_count)
         return decision, None, True
 
 
