@@ -55,14 +55,12 @@ def _redis() -> Any:
         return None
 
 
-def get_cached_answer(
-    user_id: str, question: str, tags: list[str] | None = None
-) -> str | None:
+def get_cached_answer(user_id: str, question: str) -> str | None:
     client = _redis()
     if client is None or not user_id or not question.strip():
         return None
     try:
-        value = client.get(cache_key(user_id, question, tags))
+        value = client.get(cache_key(user_id, question))
     except Exception:
         logger.warning("Response cache get failed")
         return None
@@ -71,9 +69,7 @@ def get_cached_answer(
     return None
 
 
-def set_cached_answer(
-    user_id: str, question: str, answer: str, tags: list[str] | None = None
-) -> None:
+def set_cached_answer(user_id: str, question: str, answer: str) -> None:
     client = _redis()
     if client is None or not user_id or not question.strip() or not answer.strip():
         return
@@ -81,6 +77,6 @@ def set_cached_answer(
 
     ttl = Settings.from_environment().response_cache_ttl_seconds
     try:
-        client.setex(cache_key(user_id, question, tags), ttl, answer)
+        client.setex(cache_key(user_id, question), ttl, answer)
     except Exception:
         logger.warning("Response cache set failed")
