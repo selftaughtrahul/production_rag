@@ -59,9 +59,7 @@ class QdrantVectorStore(VectorStore):
     ) -> None:
 
         if embedding_dimension <= 0:
-            raise ValueError(
-                "embedding_dimension must be greater than 0"
-            )
+            raise ValueError("embedding_dimension must be greater than 0")
         if not collection_name:
             raise ValueError("collection_name must be set")
         if not url:
@@ -76,16 +74,10 @@ class QdrantVectorStore(VectorStore):
         self.client = QdrantClient(url=url, api_key=api_key)
 
         logger.info("Loading sparse model %s", sparse_model)
-        self.sparse_model = SparseTextEmbedding(
-            model_name=sparse_model,
-            cache_dir=sparse_cache_dir,
-        )
+        self.sparse_model = SparseTextEmbedding(model_name=sparse_model,cache_dir=sparse_cache_dir)
 
         self._ensure_collection()
 
-    # =========================================================
-    # COLLECTION MANAGEMENT
-    # =========================================================
 
     def _ensure_collection(self) -> None:
         """
@@ -97,17 +89,11 @@ class QdrantVectorStore(VectorStore):
 
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config={
-                    self.dense_vector_name: VectorParams(
-                        size=self.embedding_dimension,
-                        distance=Distance.COSINE,
-                    ),
-                },
-                sparse_vectors_config={
-                    self.sparse_vector_name: SparseVectorParams(
-                        modifier=Modifier.IDF,
-                    ),
-                },
+                vectors_config={self.dense_vector_name: VectorParams(
+                    size=self.embedding_dimension,
+                    distance=Distance.COSINE,
+                )},
+                sparse_vectors_config={self.sparse_vector_name: SparseVectorParams(modifier=Modifier.IDF)},
                 # Per-tenant HNSW graphs instead of one global graph.
                 hnsw_config=HnswConfigDiff(m=0, payload_m=16),
             )
@@ -121,32 +107,18 @@ class QdrantVectorStore(VectorStore):
 
         vectors = params.vectors
         if not isinstance(vectors, dict) or self.dense_vector_name not in vectors:
-            raise ValueError(
-                f"Qdrant collection '{self.collection_name}' has no named "
-                f"dense vector '{self.dense_vector_name}'"
-            )
+            raise ValueError(f"Qdrant collection '{self.collection_name}' has no named dense vector '{self.dense_vector_name}'")
 
         existing_dimension = vectors[self.dense_vector_name].size
         if existing_dimension != self.embedding_dimension:
-            raise ValueError(
-                "Qdrant collection embedding dimension mismatch: "
-                f"collection={existing_dimension}, "
-                f"provider={self.embedding_dimension}"
-            )
+            raise ValueError("Qdrant collection embedding dimension mismatch: collection={existing_dimension}, provider={self.embedding_dimension}"))
 
         sparse = params.sparse_vectors or {}
         if self.sparse_vector_name not in sparse:
-            raise ValueError(
-                f"Qdrant collection '{self.collection_name}' has no sparse "
-                f"vector '{self.sparse_vector_name}'"
-            )
+            raise ValueError(f"Qdrant collection '{self.collection_name}' has no sparse vector '{self.sparse_vector_name}'")
 
         if sparse[self.sparse_vector_name].modifier != Modifier.IDF:
-            logger.warning(
-                "Sparse vector '%s' has no IDF modifier; BM25 scores will "
-                "ignore term rarity",
-                self.sparse_vector_name,
-            )
+            logger.warning("Sparse vector '%s' has no IDF modifier; BM25 scores will ignore term rarity",self.sparse_vector_name)
 
     def _ensure_payload_indexes(self, payload_schema: dict[str, Any]) -> None:
         """
@@ -169,14 +141,7 @@ class QdrantVectorStore(VectorStore):
                     wait=True,
                 )
 
-    # =========================================================
-    # ADD / UPSERT
-    # =========================================================
-
-    def add(
-        self,
-        chunks: list[EmbeddedChunk],
-    ) -> None:
+    def add(self,chunks: list[EmbeddedChunk]) -> None:
 
         if not chunks:
             return
@@ -228,17 +193,7 @@ class QdrantVectorStore(VectorStore):
                 wait=True,
             )
 
-    # =========================================================
-    # DENSE VECTOR SEARCH
-    # =========================================================
-
-    def search(
-        self,
-        query_embedding: list[float],
-        *,
-        top_k: int = 5,
-        metadata_filter: dict[str, Any] | None = None,
-    ) -> list[SearchResult]:
+    def search(self, query_embedding: list[float], *,top_k: int = 5,metadata_filter: dict[str, Any] | None = None) -> list[SearchResult]:
 
         self._validate_embedding(query_embedding)
 
@@ -258,28 +213,12 @@ class QdrantVectorStore(VectorStore):
 
         return [self._to_search_result(point) for point in points]
 
-    # =========================================================
-    # HYBRID SEARCH (DENSE + BM25, RRF)
-    # =========================================================
-
-    def hybrid_search(
-        self,
-        query_embedding: list[float],
-        query_text: str,
-        *,
-        top_k: int = 5,
-        prefetch_limit: int | None = None,
-        metadata_filter: dict[str, Any] | None = None,
-    ) -> list[SearchResult]:
-        """
-        Run dense and sparse searches inside Qdrant and fuse them with RRF.
-        """
-
+    def hybrid_search(self, query_embedding: list[float],query_text: str, *,top_k: int = 5,prefetch_limit: int | None = None,metadata_filter: dict[str, Any] | None = None) -> list[SearchResult]:
+        """Run dense and sparse searches inside Qdrant and fuse them with RRF."""
         self._validate_embedding(query_embedding)
 
         if top_k <= 0:
-            raise ValueError(
-                "top_k must be greater than 0"
+            raise ValueError("top_k must be greater than 0"
             )
 
         prefetch_limit = prefetch_limit or top_k * 2
@@ -314,14 +253,8 @@ class QdrantVectorStore(VectorStore):
 
         return [self._to_search_result(point) for point in points]
 
-    # =========================================================
-    # DELETE CHUNKS
-    # =========================================================
 
-    def delete(
-        self,
-        chunk_ids: list[str],
-    ) -> None:
+    def delete(self,chunk_ids: list[str],) -> None:
 
         if not chunk_ids:
             return
@@ -332,15 +265,7 @@ class QdrantVectorStore(VectorStore):
             wait=True,
         )
 
-    # =========================================================
-    # DELETE DOCUMENT
-    # =========================================================
-
-    def delete_document(
-        self,
-        document_id: str,
-        user_id: str | None = None,
-    ) -> int:
+    def delete_document(self,document_id: str,user_id: str | None = None,) -> int:
         """
         Delete all chunks belonging to a document.
 
@@ -367,15 +292,7 @@ class QdrantVectorStore(VectorStore):
 
         return int(deleted)
 
-    # =========================================================
-    # COUNT DOCUMENT CHUNKS
-    # =========================================================
-
-    def count_document_chunks(
-        self,
-        document_id: str,
-        metadata_filter: dict | None = None,
-    ) -> int:
+    def count_document_chunks(self,document_id: str,metadata_filter: dict | None = None) -> int:
         """
         Count chunks belonging to a document.
 
@@ -391,13 +308,7 @@ class QdrantVectorStore(VectorStore):
 
         return int(result.count)
 
-    def preview_document_text(
-        self,
-        document_id: str,
-        user_id: str,
-        *,
-        limit: int = 1200,
-    ) -> str:
+    def preview_document_text( self, document_id: str, user_id: str, *, limit: int = 1200) -> str:
         """Return the start of a document's stored chunk text."""
         points, _offset = self.client.scroll(
             collection_name=self.collection_name,
@@ -429,12 +340,7 @@ class QdrantVectorStore(VectorStore):
             return preview[:limit].rstrip() + "…"
         return preview
 
-    def set_document_tags(
-        self,
-        document_id: str,
-        user_id: str,
-        tags: list[str],
-    ) -> None:
+    def set_document_tags(self,document_id: str,user_id: str,tags: list[str],) -> None:
         """Replace metadata.tags on every chunk of one owned document."""
         query_filter = self._document_filter(document_id, {TENANT_KEY: user_id})
         offset = None
@@ -459,27 +365,43 @@ class QdrantVectorStore(VectorStore):
             if offset is None:
                 break
 
-    # =========================================================
-    # DOCUMENT EXISTS
-    # =========================================================
-
-    def document_exists(
-        self,
-        document_id: str,
-        metadata_filter: dict | None = None,
-    ) -> bool:
-
+    def document_exists(self,document_id: str,metadata_filter: dict | None = None) -> bool:
         return self.count_document_chunks(document_id, metadata_filter) > 0
 
-    # =========================================================
-    # GET DOCUMENT CHUNKS
-    # =========================================================
+    def list_user_metadata(self, user_id: str) -> dict[str, list[str]]:
+        """Unique payload metadata values for every chunk owned by one user."""
+        if not user_id.strip():
+            return {}
 
-    def get_document_chunks(
-        self,
-        document_id: str,
-        metadata_filter: dict | None = None,
-    ) -> list[dict[str, Any]]:
+        collected: dict[str, list[str]] = {}
+        offset = None
+        skip = {"user_id", "chunk_id", "chunk_index"}
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=self._build_filter({TENANT_KEY: user_id}),
+                limit=128,
+                offset=offset,
+                with_payload=["metadata"],
+                with_vectors=False,
+            )
+            for point in points:
+                metadata = (point.payload or {}).get("metadata") or {}
+                if not isinstance(metadata, dict):
+                    continue
+                for key, value in metadata.items():
+                    if key in skip or value is None:
+                        continue
+                    raw_items = value if isinstance(value, list) else [value]
+                    bucket = collected.setdefault(str(key), [])
+                    for item in raw_items:
+                        text = str(item).strip()
+                        if text and text not in bucket:
+                            bucket.append(text)
+            if offset is None:
+                return collected
+
+    def get_document_chunks(self,document_id: str,metadata_filter: dict | None = None,) -> list[dict[str, Any]]:
         """
         Return all chunks belonging to a document.
         """
@@ -513,10 +435,6 @@ class QdrantVectorStore(VectorStore):
             if offset is None:
                 return results
 
-    # =========================================================
-    # COUNT
-    # =========================================================
-
     def count(self) -> int:
 
         result = self.client.count(
@@ -525,10 +443,6 @@ class QdrantVectorStore(VectorStore):
         )
 
         return int(result.count)
-
-    # =========================================================
-    # HEALTH CHECK
-    # =========================================================
 
     def health_check(self) -> bool:
 
@@ -539,9 +453,6 @@ class QdrantVectorStore(VectorStore):
         except Exception:
             return False
 
-    # =========================================================
-    # HELPERS
-    # =========================================================
 
     @staticmethod
     def _point_id(chunk_id: str) -> str:
@@ -565,9 +476,7 @@ class QdrantVectorStore(VectorStore):
         )
 
     @staticmethod
-    def _sanitize_metadata(
-        metadata: dict[str, Any],
-    ) -> dict[str, Any]:
+    def _sanitize_metadata(metadata: dict[str, Any],) -> dict[str, Any]:
 
         sanitized: dict[str, Any] = {}
 
@@ -591,9 +500,7 @@ class QdrantVectorStore(VectorStore):
         return sanitized
 
     @staticmethod
-    def _build_filter(
-        metadata_filter: dict[str, Any] | None,
-    ) -> Filter | None:
+    def _build_filter(metadata_filter: dict[str, Any] | None,) -> Filter | None:
         """
         user_id maps to the top-level tenant field; every other key
         maps to payload["metadata"][key].
@@ -616,11 +523,7 @@ class QdrantVectorStore(VectorStore):
 
         return Filter(must=conditions) if conditions else None
 
-    def _document_filter(
-        self,
-        document_id: str,
-        metadata_filter: dict[str, Any] | None = None,
-    ) -> Filter:
+    def _document_filter(self,document_id: str,metadata_filter: dict[str, Any] | None = None,) -> Filter:
 
         if not document_id.strip():
             raise ValueError(
@@ -631,18 +534,12 @@ class QdrantVectorStore(VectorStore):
             {**(metadata_filter or {}), "document_id": document_id}
         )
 
-    def _validate_chunks(
-        self,
-        chunks: list[EmbeddedChunk],
-    ) -> None:
+    def _validate_chunks( self, chunks: list[EmbeddedChunk],) -> None:
 
         for chunk in chunks:
             self._validate_embedding(chunk.embedding)
 
-    def _validate_embedding(
-        self,
-        embedding: list[float],
-    ) -> None:
+    def _validate_embedding(self,embedding: list[float],) -> None:
 
         if len(embedding) != self.embedding_dimension:
 

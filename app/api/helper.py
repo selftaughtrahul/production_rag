@@ -79,6 +79,44 @@ def _row_metadata(row: Document) -> dict[str, str]:
     return normalize_metadata(parsed) if isinstance(parsed, dict) else {}
 
 
+def _collect_metadata(pairs: list[dict[str, str]]) -> dict[str, list[str]]:
+    collected: dict[str, list[str]] = {}
+    for item in pairs:
+        for key, value in item.items():
+            values = collected.setdefault(key, [])
+            if value not in values:
+                values.append(value)
+    return collected
+
+
+def _vector_user_metadata(user_id: str) -> dict[str, list[str]]:
+    from app.api.dependencies import build_components
+
+    try:
+        return build_components().vector_store.list_user_metadata(user_id)
+    except Exception:
+        logger.warning("Vector metadata lookup failed for user %s", user_id, exc_info=True)
+        return {}
+
+
+def _merge_metadata(*sources: dict[str, list[str]]) -> dict[str, list[str]]:
+    collected: dict[str, list[str]] = {}
+    for source in sources:
+        for key, values in source.items():
+            bucket = collected.setdefault(key, [])
+            for value in values:
+                if value not in bucket:
+                    bucket.append(value)
+    return collected
+
+
+def get_user_metadata(db: Session, user_id: str) -> dict[str, list[str]]:
+    """One map of metadata chips from SQLite and the vector store."""
+    rows = db.scalars(select(Document).where(Document.user_id == user_id)).all()
+    database = _collect_metadata([_row_metadata(row) for row in rows])
+    return _merge_metadata(database, _vector_user_metadata(user_id))
+
+
 def _document_response(row: Document, *, chunk_count: int, file_size: int | None) -> DocumentResponse:
     status = row.status if row.status in {"processing", "ready", "failed"} else "ready"
     return DocumentResponse(
