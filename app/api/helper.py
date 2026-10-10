@@ -18,6 +18,8 @@ import uuid
 import json
 from typing import Any
 import asyncio
+from langchain_core.messages import HumanMessage
+from langchain_anthropic import ChatAnthropic
 
 
 
@@ -169,11 +171,7 @@ def _chat_run_name(question: str | None) -> str:
 
 
 
-def _build_graph_config(
-    thread_id: str,
-    user_id: str,
-    question: str | None = None,
-) -> dict[str, Any]:
+def _build_graph_config(thread_id: str,user_id: str,question: str | None = None) -> dict[str, Any]:
     return {
         "configurable": {"thread_id": thread_id},
         "run_name": _chat_run_name(question),
@@ -218,14 +216,13 @@ async def _iter_display_sse(text: str):
 
 
 
-async def _run_agent(master_graph: Any,question: str,user_id: str,thread_id: str,doc_tags: list[str] | None = None) -> dict[str, Any]:
+async def _run_agent(master_graph: Any,question: str,user_id: str,thread_id: str) -> dict[str, Any]:
     async with asyncio.timeout(60):
         result = await master_graph.ainvoke(
             {
                 "query": question,
                 "user_id": user_id,
                 "thread_id": thread_id,
-                "doc_tags": list(doc_tags or []),
                 "messages": [HumanMessage(content=question)],
                 "iterations": 0,
                 "max_iterations": 2,

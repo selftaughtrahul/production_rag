@@ -50,10 +50,7 @@ def build_master_agent_graph(
     compress_memory_node = ShortTermCompressionNode(llm=llm, router=router)
     supervisor = SupervisorNode(llm=llm, router=router)
 
-    rag_node = RAGSubGraphNode(
-        compiled_rag_graph=compiled_rag_graph,
-        tool_registry=tool_registry,
-    )
+    rag_node = RAGSubGraphNode(compiled_rag_graph=compiled_rag_graph,tool_registry=tool_registry,)
     web_node = WebAgentNode(llm=llm, tool_registry=tool_registry)
     general_node = GeneralLLMNode(llm=llm, tool_registry=tool_registry)
 

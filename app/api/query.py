@@ -60,7 +60,7 @@ async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depen
     ensure_session_owner(body.session_id, current_user.id)
     thread_id = body.session_id or generate_new_session_id()
     user_id = current_user.id
-    doc_tags = list(body.tags or [])
+    # doc_tags = list(body.tags or [])
 
     async def event_generator():
         # Send headers immediately so the UI does not sit on a pending POST
@@ -70,18 +70,14 @@ async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depen
         try:
             # Redis response cache: key = user_id + query hash + sorted tags.
             # Check before the graph so a hit does not load models.
-            cached_answer = get_cached_answer(user_id, question, doc_tags)
+            cached_answer = get_cached_answer(user_id, question)
             if cached_answer:
                 logger.info("response_cache hit user_id=%s", user_id)
                 inc_chat("cache")
-                audit_event(
-                    "chat.done",
-                    user_id=user_id,
-                    session_id=thread_id,
-                    data={"outcome": "cache"},
-                )
+                audit_event("chat.done",user_id=user_id,session_id=thread_id,data={"outcome": "cache"})
                 async for frame in _iter_display_sse(cached_answer):
                     yield frame
+                
                 yield _sse(
                     {
                         "type": "done",
@@ -97,21 +93,16 @@ async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depen
                 return
 
             master_graph = await get_master_agent_graph()
-            agent_result = await _run_agent(
-                master_graph, question, user_id, thread_id, doc_tags
-            )
+            agent_result = await _run_agent(master_graph, question, user_id, thread_id)
             context = _context_from_agent(agent_result)
+            print("is direct response",agent_result.get("direct_response"))
             llm = get_llm()
             pieces: list[str] = []
             streamed = False
             if agent_result.get("direct_response"):
                 pieces.append(str(agent_result["answer"]))
             else:
-                async for token in llm.generate_stream(
-                    question=question,
-                    context=context,
-                    long_term_memories=agent_result.get("long_term_memories") or [],
-                ):
+                async for token in llm.generate_stream(question=question,context=context,long_term_memories=agent_result.get("long_term_memories") or [],):
                     if not token:
                         continue
                     pieces.append(token)
@@ -165,20 +156,9 @@ async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depen
                 agent_result.get("input_guardrail_passed", True)
                 and full_answer != RAG_NO_EVIDENCE_ANSWER
             ):
-                set_cached_answer(user_id, question, full_answer, doc_tags)
+                set_cached_answer(user_id, question, full_answer)
             inc_chat("ok")
-            audit_event(
-                "chat.done",
-                user_id=user_id,
-                session_id=thread_id,
-                data={
-                    "outcome": "ok",
-                    "agents": [
-                        item.get("agent_name")
-                        for item in (agent_result.get("agent_trajectory") or [])
-                    ],
-                },
-            )
+            audit_event("chat.done",user_id=user_id,session_id=thread_id,data={"outcome": "ok","agents": [item.get("agent_name") for item in (agent_result.get("agent_trajectory") or [])]})
 
             yield _sse(
                 {
@@ -196,22 +176,12 @@ async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depen
 
             logger.warning("Chat unavailable: %s", exc)
             inc_chat("error")
-            audit_event(
-                "chat.error",
-                user_id=user_id,
-                session_id=thread_id,
-                data={"outcome": "llm_unavailable"},
-            )
+            audit_event("chat.error",user_id=user_id,session_id=thread_id,data={"outcome": "llm_unavailable"})
             yield _sse({"type": "error", "error": str(exc)})
         except Exception as exc:
             logger.error("Chat failed: %s", exc, exc_info=True)
             inc_chat("error")
-            audit_event(
-                "chat.error",
-                user_id=user_id,
-                session_id=thread_id,
-                data={"outcome": "failed"},
-            )
+            audit_event("chat.error",user_id=user_id,session_id=thread_id,data={"outcome": "failed"})
             yield _sse({"type": "error", "error": "Query could not be completed."})
 
     return StreamingResponse(

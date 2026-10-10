@@ -192,12 +192,12 @@ class MemoryUpdate(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     session_id: str | None = None
-    tags: list[str] = Field(default_factory=list)
+    # tags: list[str] = Field(default_factory=list)
 
-    @field_validator("tags", mode="before")
-    @classmethod
-    def clean_tags(cls, v: Any) -> list[str]:
-        return normalize_tags(v)
+    # @field_validator("tags", mode="before")
+    # @classmethod
+    # def clean_tags(cls, v: Any) -> list[str]:
+    #     return normalize_tags(v)
 
 
 # ─────────────────────────────────────────────────────────────

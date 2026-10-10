@@ -18,28 +18,13 @@ from app.guardrails.output.schema import OutputSchemaGuardrail
 from app.guardrails.output_service import OutputGuardrailService
 
 
-def build_input_guardrails(
-    nemo_provider: Any | None = None,
-    presidio_provider: Any | None = None,
-    llama_guard_provider: Any | None = None,
-) -> InputGuardrailService:
+def build_input_guardrails(nemo_provider: Any | None = None,presidio_provider: Any | None = None,llama_guard_provider: Any | None = None,) -> InputGuardrailService:
     return InputGuardrailService(
         input_validator=InputValidationGuardrail(max_length=10_000),
         jailbreak=JailbreakGuardrail(provider=nemo_provider),
-        prompt_injection=(
-            PromptInjectionGuardrail(provider=nemo_provider)
-            if provider_is_ready(nemo_provider)
-            else None
-        ),
-        pii_detector=(
-            InputPresidioGuardrail(provider=presidio_provider)
-            if presidio_provider
-            else None
-        ),
-        safety_checker=(
-            InputSafetyGuardrail(provider=llama_guard_provider)
-            if llama_guard_provider
-            else None
+        prompt_injection=(PromptInjectionGuardrail(provider=nemo_provider) if provider_is_ready(nemo_provider) else None),
+        pii_detector=(InputPresidioGuardrail(provider=presidio_provider)if presidio_provider else None),
+        safety_checker=(InputSafetyGuardrail(provider=llama_guard_provider)if llama_guard_provider else None
         ),
     )
 
@@ -51,18 +36,8 @@ def build_output_guardrails(
     response_schema: Any | None = None,
 ) -> OutputGuardrailService:
     return OutputGuardrailService(
-        schema_validator=OutputSchemaGuardrail(schema=response_schema)
-        if response_schema
-        else None,
-        grounding_checker=GroundingGuardrail(evaluator=grounding_evaluator)
-        if grounding_evaluator
-        else None,
-        pii_detector=(
-            OutputPIIGuardrail(provider=presidio_provider) if presidio_provider else None
-        ),
-        safety_checker=(
-            OutputSafetyGuardrail(provider=llama_guard_provider)
-            if llama_guard_provider
-            else None
-        ),
+        schema_validator=OutputSchemaGuardrail(schema=response_schema)if response_schema else None,
+        grounding_checker=GroundingGuardrail(evaluator=grounding_evaluator) if grounding_evaluator else None,
+        pii_detector=(OutputPIIGuardrail(provider=presidio_provider) if presidio_provider else None),
+        safety_checker=(OutputSafetyGuardrail(provider=llama_guard_provider)if llama_guard_provider else None),
     )

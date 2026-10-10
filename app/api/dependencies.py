@@ -290,11 +290,7 @@ async def get_master_agent_graph():
             llm = get_llm()
             retriever = get_hybrid_retriever()
             tool_registry = get_tool_registry(retriever=retriever)
-            _compiled_graphs["agent"] = build_master_agent_graph(
-                llm=llm,
-                router=get_laya(),
-                tool_registry=tool_registry,
-                compiled_rag_graph=compiled_rag,
+            _compiled_graphs["agent"] = build_master_agent_graph(llm=llm,router=get_laya(),tool_registry=tool_registry,compiled_rag_graph=compiled_rag,
                 input_guardrails=build_input_guardrails(
                     nemo_provider=get_nemo_provider(),
                     presidio_provider=get_presidio_provider(),

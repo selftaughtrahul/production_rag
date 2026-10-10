@@ -10,14 +10,7 @@ from app.guardrails.base import BaseInputGuardrail, GuardrailResult, run_input_r
 
 
 class InputGuardrailService:
-    def __init__(
-        self,
-        input_validator: BaseInputGuardrail | None = None,
-        jailbreak: BaseInputGuardrail | None = None,
-        prompt_injection: BaseInputGuardrail | None = None,
-        pii_detector: BaseInputGuardrail | None = None,
-        safety_checker: BaseInputGuardrail | None = None,
-    ) -> None:
+    def __init__(self,input_validator: BaseInputGuardrail | None = None,jailbreak: BaseInputGuardrail | None = None,prompt_injection: BaseInputGuardrail | None = None,pii_detector: BaseInputGuardrail | None = None,safety_checker: BaseInputGuardrail | None = None) -> None:
         self.input_validator = input_validator
         self.jailbreak = jailbreak
         self.prompt_injection = prompt_injection
