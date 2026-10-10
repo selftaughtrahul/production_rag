@@ -192,12 +192,7 @@ class MemoryUpdate(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     session_id: str | None = None
-    # tags: list[str] = Field(default_factory=list)
 
-    # @field_validator("tags", mode="before")
-    # @classmethod
-    # def clean_tags(cls, v: Any) -> list[str]:
-    #     return normalize_tags(v)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -214,7 +209,6 @@ class DocumentResponse(BaseModel):
     user_id: str
     file_name: str
     created_at: datetime
-    tags: list[str] = Field(default_factory=list)
     metadata: dict[str, str] = Field(default_factory=dict)
     file_size: int | None = None
     chunk_count: int = 0
