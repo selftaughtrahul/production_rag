@@ -24,60 +24,33 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     Create a new user account and return a JWT access token.
     """
     if db.scalar(select(User.id).where(User.email == request.email)):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail="An account with this email already exists" )
 
     if db.scalar(select(User.id).where(User.username == request.username)):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username is already taken",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail="Username is already taken")
 
     user_id = str(uuid4())
-    db.add(
-        User(
-            id=user_id,
-            username=request.username,
-            email=request.email,
-            password=hash_password(request.password),
-        )
-    )
+    db.add(User(id=user_id,username=request.username,email=request.email,password=hash_password(request.password)))
 
     token = create_access_token(user_id=user_id, username=request.username)
     return TokenResponse(access_token=token, user_id=user_id, username=request.username)
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(
-    request: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
-):
+def login(request: OAuth2PasswordRequestForm = Depends(),db: Session = Depends(get_db)):
     """
     Authenticate with email (passed as username in form) + password and return a JWT access token.
     """
     user = db.scalar(select(User).where(User.email == request.username))
 
     if user is None or not verify_password(request.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Incorrect email or password",headers={"WWW-Authenticate": "Bearer"})
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Account is inactive")
 
     token = create_access_token(user_id=user.id, username=user.username)
-    return TokenResponse(
-        access_token=token,
-        user_id=user.id,
-        username=user.username,
-    )
+    return TokenResponse(access_token=token,user_id=user.id,username=user.username)
 
 
 @router.get("/me", response_model=UserInDB)
