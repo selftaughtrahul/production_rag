@@ -60,7 +60,6 @@ async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depen
     ensure_session_owner(body.session_id, current_user.id)
     thread_id = body.session_id or generate_new_session_id()
     user_id = current_user.id
-    # doc_tags = list(body.tags or [])
 
     async def event_generator():
         # Send headers immediately so the UI does not sit on a pending POST

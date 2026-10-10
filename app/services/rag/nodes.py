@@ -69,9 +69,6 @@ class RAGNodes:
                 }
 
             metadata_filter: dict = {"user_id": user_id}
-            doc_tags = [tag for tag in (state.get("doc_tags") or []) if isinstance(tag, str) and tag]
-            if doc_tags:
-                metadata_filter["tags"] = doc_tags
             settings = Settings.from_environment()
             # Cap pairs so the cross-encoder stays around 200ms, not a second pass of 20 chunks.
             retrieve_k = min(settings.dense_top_k, max(settings.rerank_top_k * 2, 8))

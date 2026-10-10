@@ -29,9 +29,6 @@ class SupervisorState(TypedDict, total=False):
     query: str
     user_id: str
     thread_id: str
-    # Document tags chosen by the user for this turn; AND-filtered at retrieval
-    doc_tags: List[str]
-
     # Conversational memory (LangGraph add_messages reducer)
     messages: Annotated[List[BaseMessage], add_messages]
 

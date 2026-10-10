@@ -21,11 +21,10 @@ async def invoke_tool(
     user_id: str | None = None,
     session_id: str | None = None,
     approved: bool = False,
-    doc_tags: list[str] | None = None,
 ) -> Any:
     """Run a tool, or refuse write/high-risk tools until approved.
 
-    ``user_id`` and ``doc_tags`` are injected by the orchestrator, never by
+    ``user_id`` and ```` are injected by the orchestrator, never by
     the model, so the tenant and tag filters cannot be dropped.
     """
     name = getattr(tool, "name", "unknown")
@@ -34,8 +33,7 @@ async def invoke_tool(
         if not user_id:
             raise PermissionError(f"Tool '{name}' requires an authenticated user.")
         safe_payload["user_id"] = user_id
-    if name == "document_search":
-        safe_payload["tags"] = list(doc_tags or [])
+   
     if getattr(tool, "requires_approval", False) and not approved:
         audit_event(
             "tool.denied",
