@@ -111,7 +111,7 @@ class QdrantVectorStore(VectorStore):
 
         existing_dimension = vectors[self.dense_vector_name].size
         if existing_dimension != self.embedding_dimension:
-            raise ValueError("Qdrant collection embedding dimension mismatch: collection={existing_dimension}, provider={self.embedding_dimension}"))
+            raise ValueError("Qdrant collection embedding dimension mismatch: collection={existing_dimension}, provider={self.embedding_dimension}")
 
         sparse = params.sparse_vectors or {}
         if self.sparse_vector_name not in sparse:
