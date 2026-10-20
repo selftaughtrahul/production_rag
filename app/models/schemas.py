@@ -12,39 +12,25 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ─────────────────────────────────────────────────────────────
-# Document tags (user metadata chips)
+# Document metadata prepared during ingestion
 # ─────────────────────────────────────────────────────────────
 
-MAX_TAGS = 20
-MAX_TAG_LENGTH = 32
 MAX_METADATA = 20
-MAX_METADATA_VALUE = 64
-RESERVED_TAGS = frozenset({"user_id", "document_id", "filename", "chunk_id", "chunk_index"})
-_TAG_DROP = re.compile(r"[^a-z0-9_-]+")
+MAX_METADATA_KEY = 32
+MAX_METADATA_VALUE = 128
+_RESERVED_METADATA_KEYS = frozenset(
+    {"user_id", "document_id", "chunk_id", "chunk_index", "tags"}
+)
+_META_KEY_DROP = re.compile(r"[^a-z0-9_-]+")
 _META_VALUE_DROP = re.compile(r"[\x00-\x1f]+")
 
 
-def normalize_tags(raw: Any) -> list[str]:
-    """Lowercase, hyphenate spaces, strip unsafe chars, dedupe, cap count and length."""
-    if raw is None:
-        return []
-    if isinstance(raw, str):
-        raw = [raw]
-    if not isinstance(raw, (list, tuple, set)):
-        raise ValueError("tags must be a list of strings")
-
-    tags: list[str] = []
-    for item in raw:
-        if not isinstance(item, str):
-            continue
-        tag = re.sub(r"\s+", "-", item.strip().lower())
-        tag = _TAG_DROP.sub("", tag).strip("-_")[:MAX_TAG_LENGTH]
-        if not tag or tag in RESERVED_TAGS or tag in tags:
-            continue
-        tags.append(tag)
-        if len(tags) >= MAX_TAGS:
-            break
-    return tags
+def _metadata_key(key: str) -> str:
+    cleaned = re.sub(r"\s+", "-", key.strip().lower())
+    cleaned = _META_KEY_DROP.sub("", cleaned).strip("-_")[:MAX_METADATA_KEY]
+    if not cleaned or cleaned in _RESERVED_METADATA_KEYS:
+        return ""
+    return cleaned
 
 
 def normalize_metadata(raw: Any) -> dict[str, str]:
@@ -79,8 +65,7 @@ def normalize_metadata(raw: Any) -> dict[str, str]:
     for key, value in raw.items():
         if not isinstance(key, str) or not isinstance(value, str):
             continue
-        norm_key = normalize_tags([key])
-        clean_key = norm_key[0] if norm_key else ""
+        clean_key = _metadata_key(key)
         clean_value = _META_VALUE_DROP.sub(" ", value).strip()[:MAX_METADATA_VALUE]
         if not clean_key or not clean_value:
             continue
@@ -218,25 +203,6 @@ class DocumentResponse(BaseModel):
 
 class DocumentDetailResponse(DocumentResponse):
     preview: str | None = None
-
-
-class DocumentUpdate(BaseModel):
-    tags: list[str] | None = None
-    metadata: dict[str, str] | None = None
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def clean_tags(cls, v: Any) -> list[str] | None:
-        if v is None:
-            return None
-        return normalize_tags(v)
-
-    @field_validator("metadata", mode="before")
-    @classmethod
-    def clean_metadata(cls, v: Any) -> dict[str, str] | None:
-        if v is None:
-            return None
-        return normalize_metadata(v)
 
 
 # ─────────────────────────────────────────────────────────────

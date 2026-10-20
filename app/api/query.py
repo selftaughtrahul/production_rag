@@ -67,7 +67,7 @@ async def chat(request: Request,body: ChatRequest,current_user: UserInDB = Depen
         yield ": keepalive\n\n"
 
         try:
-            # Redis response cache: key = user_id + query hash + sorted tags.
+            # Redis response cache: key = user_id + query hash.
             # Check before the graph so a hit does not load models.
             cached_answer = get_cached_answer(user_id, question)
             if cached_answer:

@@ -25,7 +25,7 @@ async def invoke_tool(
     """Run a tool, or refuse write/high-risk tools until approved.
 
     ``user_id`` and ```` are injected by the orchestrator, never by
-    the model, so the tenant and tag filters cannot be dropped.
+    the model, so the tenant filter cannot be dropped.
     """
     name = getattr(tool, "name", "unknown")
     safe_payload = dict(payload)

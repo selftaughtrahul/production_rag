@@ -27,7 +27,7 @@
       </header>
       <div class="gpt-page">
         <h1>Documents</h1>
-        <p class="sub">Upload files, tag them, and manage what the assistant can search.</p>
+        <p class="sub">Upload files. Metadata is prepared and saved during ingestion.</p>
         <div class="alert" id="docs-alert" role="alert"></div>
         <div class="alert is-info" id="docs-info" role="status"></div>
 
@@ -35,14 +35,6 @@
           <label class="doc-file">
             <span class="doc-file-label">File</span>
             <input type="file" id="upload-file" required>
-          </label>
-          <label class="doc-tags-field">
-            <span class="doc-file-label">Tags</span>
-            <div id="upload-tags" data-placeholder="Type a tag, press Enter"></div>
-          </label>
-          <label class="doc-tags-field">
-            <span class="doc-file-label">Metadata</span>
-            <div id="upload-meta" data-placeholder="key: value, then Enter"></div>
           </label>
           <button type="submit" class="btn" id="upload-btn">Upload</button>
           <div class="upload-progress" id="upload-progress" hidden>
@@ -59,17 +51,7 @@
             <button type="button" class="btn ghost small" id="doc-detail-close">Close</button>
           </div>
           <p class="doc-detail-status" id="doc-detail-status"></p>
-          <label class="doc-tags-field">
-            <span class="doc-file-label">Tags</span>
-            <div id="detail-tags" data-placeholder="Type a tag, press Enter"></div>
-          </label>
-          <label class="doc-tags-field">
-            <span class="doc-file-label">Custom metadata</span>
-            <div id="detail-meta" data-placeholder="key: value, then Enter"></div>
-          </label>
-          <div class="doc-detail-actions">
-            <button type="button" class="btn" id="detail-save">Save</button>
-          </div>
+          <div class="doc-tags" id="detail-meta"></div>
           <pre class="doc-preview" id="doc-preview"></pre>
         </section>
 

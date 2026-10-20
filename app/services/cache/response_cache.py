@@ -17,12 +17,10 @@ _client_failed = False
 _CACHE_VERSION = "2"
 
 
-def cache_key(user_id: str, question: str, tags: list[str] | None = None) -> str:
-    """Key on the normalized question plus sorted tags so a tag-filtered
-    answer is never reused for an unfiltered one (or vice versa)."""
-    scope = "|".join(sorted(tags or []))
+def cache_key(user_id: str, question: str) -> str:
+    """Key on the normalized question for one user."""
     digest = hashlib.sha256(
-        f"{question.strip().lower()}\n{scope}".encode("utf-8")
+        f"{question.strip().lower()}".encode("utf-8")
     ).hexdigest()
     return f"rag:answer:{_CACHE_VERSION}:{user_id}:{digest}"
 

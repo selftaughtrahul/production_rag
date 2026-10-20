@@ -88,7 +88,6 @@ def init_db() -> None:
         ],
     )
     _ensure_column("documents", "file_path", "TEXT")
-    _ensure_column("documents", "tags", "TEXT")
     _ensure_column("documents", "custom_metadata", "TEXT")
     _ensure_column("documents", "status", "TEXT NOT NULL DEFAULT 'ready'")
     _ensure_column("documents", "error_message", "TEXT")

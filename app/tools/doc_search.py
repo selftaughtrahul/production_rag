@@ -24,10 +24,6 @@ class DocumentSearchInput(BaseModel):
     user_id: SkipJsonSchema[str] = Field(
         ..., description="Authenticated user id; always provided by the orchestrator."
     )
-    tags: SkipJsonSchema[list[str]] = Field(
-        default_factory=list,
-        description="Document tags chosen by the user; injected by the orchestrator.",
-    )
 
 
 class DocumentSearchTool(BaseAgentTool):
@@ -47,7 +43,6 @@ class DocumentSearchTool(BaseAgentTool):
         query: str,
         top_k: int = 5,
         user_id: str = "",
-        tags: list[str] | None = None,
     ) -> str:
         """Synchronous execution wrapper."""
         if not user_id:
@@ -56,9 +51,6 @@ class DocumentSearchTool(BaseAgentTool):
             ).to_str()
         try:
             metadata_filter: dict = {"user_id": user_id}
-            clean_tags = [tag for tag in (tags or []) if isinstance(tag, str) and tag]
-            if clean_tags:
-                metadata_filter["tags"] = clean_tags
             results = self.retriever.retrieve(
                 query=query,
                 top_k=top_k,
@@ -93,7 +85,6 @@ class DocumentSearchTool(BaseAgentTool):
         query: str,
         top_k: int = 5,
         user_id: str = "",
-        tags: list[str] | None = None,
     ) -> str:
         """Async execution bridge."""
         return await asyncio.to_thread(
@@ -101,7 +92,6 @@ class DocumentSearchTool(BaseAgentTool):
             query=query,
             top_k=top_k,
             user_id=user_id,
-            tags=tags,
         )
 
 

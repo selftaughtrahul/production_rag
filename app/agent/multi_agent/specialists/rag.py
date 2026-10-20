@@ -59,7 +59,7 @@ class RAGSubGraphNode:
                 rag_input = {
                     "question": query,
                     "user_id": user_id,
-                    # Always set so a previous turn's tags cannot leak via the checkpoint.
+                    # Always set so a previous turn cannot leak via the checkpoint.
                     "skip_memory_persist": True,
                     "skip_generate": True,
                     "rewritten_question": None,

@@ -129,7 +129,6 @@ class QdrantVectorStore(VectorStore):
         indexes = {
             TENANT_KEY: KeywordIndexParams(type="keyword", is_tenant=True),
             "metadata.document_id": KeywordIndexParams(type="keyword"),
-            "metadata.tags": KeywordIndexParams(type="keyword"),
         }
 
         for field_name, schema in indexes.items():
@@ -340,31 +339,6 @@ class QdrantVectorStore(VectorStore):
             return preview[:limit].rstrip() + "…"
         return preview
 
-    def set_document_tags(self,document_id: str,user_id: str,tags: list[str],) -> None:
-        """Replace metadata.tags on every chunk of one owned document."""
-        query_filter = self._document_filter(document_id, {TENANT_KEY: user_id})
-        offset = None
-        while True:
-            points, offset = self.client.scroll(
-                collection_name=self.collection_name,
-                scroll_filter=query_filter,
-                limit=64,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False,
-            )
-            for point in points:
-                metadata = dict((point.payload or {}).get("metadata") or {})
-                metadata["tags"] = list(tags)
-                self.client.set_payload(
-                    collection_name=self.collection_name,
-                    payload={"metadata": metadata},
-                    points=[point.id],
-                    wait=False,
-                )
-            if offset is None:
-                break
-
     def document_exists(self,document_id: str,metadata_filter: dict | None = None) -> bool:
         return self.count_document_chunks(document_id, metadata_filter) > 0
 
@@ -375,7 +349,7 @@ class QdrantVectorStore(VectorStore):
 
         collected: dict[str, list[str]] = {}
         offset = None
-        skip = {"user_id", "chunk_id", "chunk_index"}
+        skip = {"user_id", "chunk_id", "chunk_index", "tags"}
         while True:
             points, offset = self.client.scroll(
                 collection_name=self.collection_name,
@@ -488,7 +462,7 @@ class QdrantVectorStore(VectorStore):
             if isinstance(value, (str, int, float, bool)):
                 sanitized[key] = value
             elif isinstance(value, (list, tuple)):
-                # Keep keyword arrays (e.g. tags) so Qdrant can match any element.
+                # Keep keyword arrays so Qdrant can match any element.
                 sanitized[key] = [
                     item if isinstance(item, (str, int, float, bool)) else str(item)
                     for item in value
@@ -505,7 +479,7 @@ class QdrantVectorStore(VectorStore):
         user_id maps to the top-level tenant field; every other key
         maps to payload["metadata"][key].
 
-        A list value (e.g. tags) becomes one condition per element, so every
+        A list value becomes one condition per element, so every
         listed value must be present on the point (AND semantics).
         """
 

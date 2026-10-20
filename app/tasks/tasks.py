@@ -102,27 +102,21 @@ def ingest_document_task(
     document_id: str,
     filename: str,
     user_id: str,
-    tags: list[str] | None = None,
-    custom_metadata: dict[str, str] | None = None,
     content_hash: str | None = None,
     file_size: int | None = None,
 ) -> dict:
-    """Celery background task to ingest a document with tenant metadata and tags."""
+    """Celery background task to ingest a document and store prepared metadata."""
     _ensure_project_root()
     from app.api.dependencies import build_ingestion_pipeline
     from database.models import Document
     from database.sqlite import SessionLocal
 
-    tags = list(tags or [])
-    custom_metadata = dict(custom_metadata or {})
     try:
         result = build_ingestion_pipeline(source=source).ingest(
             source=source,
             document_id=document_id,
             filename=filename,
             user_id=user_id,
-            tags=tags,
-            custom_metadata=custom_metadata,
             content_hash=content_hash,
             file_size=file_size,
         )
@@ -140,7 +134,6 @@ def ingest_document_task(
             payload={
                 "source": source,
                 "filename": filename,
-                "tags": tags,
             },
             exc=exc,
             retries=self.request.retries,
@@ -156,6 +149,8 @@ def ingest_document_task(
 
     session = SessionLocal()
     try:
+        prepared = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+        stored_metadata = json.dumps(prepared) if prepared else None
         row = session.get(Document, document_id)
         if row is None:
             session.add(
@@ -164,7 +159,7 @@ def ingest_document_task(
                     user_id=user_id,
                     file_name=filename,
                     file_path=source,
-                    tags=json.dumps(tags) if tags else None,
+                    custom_metadata=stored_metadata,
                     status="ready",
                 )
             )
@@ -172,7 +167,7 @@ def ingest_document_task(
             row.status = "ready"
             row.error_message = None
             row.file_path = source
-            row.tags = json.dumps(tags) if tags else None
+            row.custom_metadata = stored_metadata
         session.commit()
     except Exception as e:
         session.rollback()

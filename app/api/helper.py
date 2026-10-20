@@ -2,7 +2,6 @@
 from app.models.schemas import (
     DocumentResponse,
     normalize_metadata,
-    normalize_tags,
 )
 import shutil
 import hashlib
@@ -30,43 +29,6 @@ _DOCUMENTS_ROOT = Path("documents")
 
 def _content_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
-
-
-def _parse_metadata_form(raw: str | None) -> dict[str, str]:
-    """Accept a JSON object or comma-separated key:value pairs."""
-    if not raw or not raw.strip():
-        return {}
-    try:
-        return normalize_metadata(raw)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-def _parse_tags_form(raw: str | None) -> list[str]:
-    """Accept a JSON array or a comma-separated string from the upload form."""
-    if not raw or not raw.strip():
-        return []
-    text = raw.strip()
-    if text.startswith("["):
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail="tags must be a JSON array") from exc
-        if not isinstance(parsed, list):
-            raise HTTPException(status_code=400, detail="tags must be a JSON array")
-        return normalize_tags(parsed)
-    return normalize_tags(text.split(","))
-
-
-def _row_tags(row: Document) -> list[str]:
-    """Decode the JSON tags column; tolerate legacy rows without tags."""
-    if not row.tags:
-        return []
-    try:
-        parsed = json.loads(row.tags)
-    except json.JSONDecodeError:
-        return []
-    return normalize_tags(parsed) if isinstance(parsed, list) else []
 
 
 def _row_metadata(row: Document) -> dict[str, str]:
@@ -124,7 +86,6 @@ def _document_response(row: Document, *, chunk_count: int, file_size: int | None
         user_id=row.user_id,
         file_name=row.file_name,
         created_at=row.created_at,
-        tags=_row_tags(row),
         metadata=_row_metadata(row),
         file_size=file_size,
         chunk_count=chunk_count,

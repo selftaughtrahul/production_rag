@@ -1,12 +1,8 @@
-/* Documents page: upload with tag chips, grid/list views, download, delete. */
+/* Documents page: upload, grid/list views, download, delete. */
 (function (window, $, App) {
   "use strict";
 
   var VIEW_KEY = "rag_docs_view";
-  var uploadChips = null;
-  var uploadMeta = null;
-  var detailTags = null;
-  var detailMeta = null;
   var items = [];
   var openId = null;
   var previewFor = null;
@@ -117,17 +113,13 @@
     }
     $li.append($head);
 
-    var $tags = $('<div class="doc-tags"></div>');
-    if (item.tags && item.tags.length) {
-      $tags.append(App.renderTags(item.tags));
-    }
+    var $metaChips = $('<div class="doc-tags"></div>');
     if (item.metadata && Object.keys(item.metadata).length) {
-      $tags.append(App.renderMeta(item.metadata));
+      $metaChips.append(App.renderMeta(item.metadata));
+    } else {
+      $metaChips.append($('<span class="doc-no-tags"></span>').text("No metadata"));
     }
-    if (!$tags.children().length) {
-      $tags.append($('<span class="doc-no-tags"></span>').text("No tags"));
-    }
-    $li.append($tags);
+    $li.append($metaChips);
 
     var $meta = $('<div class="doc-meta"></div>');
     $meta.append(metaItem("Uploaded", formatWhen(item.created_at)));
@@ -160,18 +152,6 @@
     });
   }
 
-  function allTags() {
-    var seen = [];
-    items.forEach(function (item) {
-      (item.tags || []).forEach(function (tag) {
-        if (seen.indexOf(tag) === -1) {
-          seen.push(tag);
-        }
-      });
-    });
-    return seen.sort();
-  }
-
   function load() {
     return App.api("GET", "/documents")
       .done(function (res) {
@@ -179,9 +159,6 @@
         showAlert("");
         renderList();
         syncOpenStatus();
-        if (uploadChips) {
-          uploadChips.suggest(allTags());
-        }
         schedulePoll();
       })
       .fail(function (xhr) {
@@ -296,7 +273,6 @@
       return;
     }
     $("#doc-detail-status").text(statusText(item));
-    $("#detail-save").prop("disabled", statusOf(item) === "processing");
     if (statusOf(item) === "ready" && previewFor !== item.id) {
       previewFor = item.id;
       App.api("GET", "/documents/" + encodeURIComponent(item.id))
@@ -317,13 +293,12 @@
         $("#doc-detail").prop("hidden", false);
         $("#doc-detail-name").text(doc.file_name || "Untitled");
         $("#doc-detail-status").text(statusText(doc));
-        if (!detailTags) {
-          detailTags = App.chips($("#detail-tags"), { placeholder: "Type a tag, press Enter" });
-          detailMeta = App.metaChips($("#detail-meta"), { placeholder: "key: value, then Enter" });
+        var $detailMeta = $("#detail-meta").empty();
+        if (doc.metadata && Object.keys(doc.metadata).length) {
+          $detailMeta.append(App.renderMeta(doc.metadata));
+        } else {
+          $detailMeta.append($('<span class="doc-no-tags"></span>').text("No metadata yet"));
         }
-        detailTags.set(doc.tags || []);
-        detailMeta.set(doc.metadata || {});
-        $("#detail-save").prop("disabled", statusOf(doc) === "processing");
         if (doc.preview) {
           $("#doc-preview").text(doc.preview);
         } else if (statusOf(doc) === "processing") {
@@ -334,25 +309,6 @@
       })
       .fail(function (xhr) {
         showAlert(App.errorMessage(xhr, "Could not open that document."));
-      });
-  }
-
-  function saveDetail() {
-    if (!openId || !detailTags || !detailMeta) {
-      return;
-    }
-    $("#detail-save").prop("disabled", true);
-    App.api.json("PATCH", "/documents/" + encodeURIComponent(openId), {
-      tags: detailTags.get(),
-      metadata: detailMeta.get()
-    })
-      .done(function () {
-        showInfo("Saved tags and metadata.");
-        load();
-      })
-      .fail(function (xhr) {
-        $("#detail-save").prop("disabled", false);
-        showAlert(App.errorMessage(xhr, "Could not save document details."));
       });
   }
 
@@ -391,12 +347,8 @@
       showAlert("Choose a file to upload.");
       return;
     }
-    var tags = uploadChips ? uploadChips.get() : [];
-    var metadata = uploadMeta ? uploadMeta.get() : {};
     var form = new FormData();
     form.append("file", file, file.name);
-    form.append("tags", JSON.stringify(tags));
-    form.append("metadata", JSON.stringify(metadata));
 
     showAlert("");
     showInfo("");
@@ -423,12 +375,6 @@
     })
       .done(function (res) {
         $("#upload-file").val("");
-        if (uploadChips) {
-          uploadChips.clear();
-        }
-        if (uploadMeta) {
-          uploadMeta.clear();
-        }
         if (res && (res.task_id || res.status === "processing")) {
           setProgress(100, "Processing " + file.name + "…", true);
           showInfo("Upload received. Ingesting in the background…");
@@ -455,8 +401,6 @@
   }
 
   App.startDocuments = function () {
-    uploadChips = App.chips($("#upload-tags"), { placeholder: "Type a tag, press Enter" });
-    uploadMeta = App.metaChips($("#upload-meta"), { placeholder: "key: value, then Enter" });
     setView(getView());
 
     $(".view-btn").on("click", function () {
@@ -478,7 +422,6 @@
     });
 
     $("#doc-detail-close").on("click", closeDetail);
-    $("#detail-save").on("click", saveDetail);
 
     load();
   };

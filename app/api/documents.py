@@ -9,14 +9,13 @@ import logging
 from pathlib import Path
 from uuid import uuid4
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from typing import List
 from app.api.dependencies import build_components, build_ingestion_pipeline
 from app.models.schemas import (
     DocumentDetailResponse,
     DocumentResponse,
-    DocumentUpdate,
     UserInDB
 )
 from app.services.auth.dependencies import get_current_user
@@ -31,8 +30,6 @@ from sqlalchemy import select
 from .helper import (
     _content_hash,
     _find_duplicate,
-    _parse_metadata_form,
-    _parse_tags_form,
     _save_upload,
     _delete_stored_file,
     _resolve_stored_file,
@@ -64,13 +61,13 @@ async def get_task_status(task_id: str,current_user: UserInDB = Depends(get_curr
     return response
 
 @router.post("/ingest", summary="Upload and ingest a document")
-async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(default=None),metadata: str | None = Form(default=None),current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
+async def ingest_document(file: UploadFile = File(...),current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
     """
     Upload a document and ingest it into the vector store.
 
     The authenticated user's ID is stored as metadata on every chunk
-    so that retrieval can be scoped per-user. Optional ``tags`` (JSON array
-    or comma-separated) are stored on the document and every chunk.
+    so that retrieval can be scoped per-user. File metadata is prepared
+    and saved during ingestion.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
@@ -85,8 +82,6 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
     except UploadRejected as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    tag_list = _parse_tags_form(tags)
-    custom_metadata = _parse_metadata_form(metadata)
     content_hash = _content_hash(content)
     duplicate = _find_duplicate(db, user_id=current_user.id, content_hash=content_hash)
     if duplicate is not None:
@@ -112,8 +107,6 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
         user_id=current_user.id,
         file_name=file.filename,
         file_path=file_path,
-        tags=json.dumps(tag_list) if tag_list else None,
-        custom_metadata=json.dumps(custom_metadata) if custom_metadata else None,
         status="processing",
         content_hash=content_hash,
     )
@@ -136,8 +129,6 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
                 document_id=document_id,
                 filename=file.filename,
                 user_id=current_user.id,
-                tags=tag_list,
-                custom_metadata=custom_metadata,
                 content_hash=content_hash,
                 file_size=len(content),
             )
@@ -145,7 +136,7 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
             record_ingestion_failure(
                 document_id=document_id,
                 user_id=current_user.id,
-                payload={"source": file_path, "filename": file.filename, "tags": tag_list},
+                payload={"source": file_path, "filename": file.filename},
                 exc=exc,
                 retries=0,
             )
@@ -156,8 +147,6 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
             "message": "Upload received. Ingestion started in background.",
             "document_id": document_id,
             "filename": file.filename,
-            "tags": tag_list,
-            "metadata": custom_metadata,
             "task_id": task.id,
             "status": "processing",
         }
@@ -170,8 +159,6 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
             document_id=document_id,
             filename=file.filename,
             user_id=current_user.id,
-            tags=tag_list,
-            custom_metadata=custom_metadata,
             content_hash=content_hash,
             file_size=len(content),
         )
@@ -182,15 +169,17 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
         record_ingestion_failure(
             document_id=document_id,
             user_id=current_user.id,
-            payload={"source": file_path, "filename": file.filename, "tags": tag_list},
+            payload={"source": file_path, "filename": file.filename},
             exc=exc,
             retries=0,
         )
         _mark_failed(db, row, file_path)
         raise
 
+    prepared = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
     row.status = "ready"
     row.error_message = None
+    row.custom_metadata = json.dumps(prepared) if prepared else None
     db.commit()
 
     return {
@@ -199,20 +188,15 @@ async def ingest_document(file: UploadFile = File(...),tags: str | None = Form(d
         "document_id": document_id,
         "filename": file.filename,
         "user_id": current_user.id,
-        "tags": tag_list,
-        "metadata": custom_metadata,
+        "metadata": prepared,
         "status": "ready",
         "ingestion": result,
     }
 
 @router.get("/documents", response_model=List[DocumentResponse], summary="List user documents")
 async def list_documents(current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
-    """List the user's documents with tags, file size, and stored chunk count."""
-    rows = db.scalars(
-        select(Document)
-        .where(Document.user_id == current_user.id)
-        .order_by(Document.created_at.desc())
-    ).all()
+    """List the user's documents with prepared metadata, file size, and chunk count."""
+    rows = db.scalars(select(Document).where(Document.user_id == current_user.id).order_by(Document.created_at.desc())).all()
 
     def _chunk_counts() -> dict[str, int]:
         if not rows:
@@ -221,9 +205,7 @@ async def list_documents(current_user: UserInDB = Depends(get_current_user),db: 
         counts: dict[str, int] = {}
         for row in rows:
             try:
-                counts[row.id] = vector_store.count_document_chunks(
-                    row.id, metadata_filter={"user_id": current_user.id}
-                )
+                counts[row.id] = vector_store.count_document_chunks(row.id, metadata_filter={"user_id": current_user.id})
             except Exception:
                 logger.warning("Chunk count failed for document %s", row.id, exc_info=True)
                 counts[row.id] = 0
@@ -257,7 +239,7 @@ def _owned_document(db: Session, document_id: str, user_id: str) -> Document:
 
 @router.get("/documents/{document_id}",response_model=DocumentDetailResponse,summary="Show one document",)
 async def show_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
-    """Return status, tags, custom metadata, and a short text preview."""
+    """Return status, prepared metadata, and a short text preview."""
     row = _owned_document(db, document_id, current_user.id)
 
     def _detail() -> tuple[int, str]:
@@ -287,52 +269,6 @@ async def show_document(document_id: str,current_user: UserInDB = Depends(get_cu
         preview=preview or None,
     )
 
-
-@router.patch("/documents/{document_id}",response_model=DocumentResponse,summary="Update document tags and custom metadata")
-async def update_document(document_id: str,body: DocumentUpdate,current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):
-    """Save tag chips and custom metadata chips for one owned document."""
-    row = _owned_document(db, document_id, current_user.id)
-    if row.status == "processing":
-        raise HTTPException(status_code=409, detail="Document is still processing.")
-
-    if body.tags is not None and row.status == "ready":
-        tags = body.tags
-
-        def _sync_tags() -> None:
-            build_components().vector_store.set_document_tags(
-                row.id, current_user.id, tags
-            )
-
-        try:
-            await asyncio.to_thread(_sync_tags)
-        except Exception:
-            logger.warning("Could not update chunk tags for %s", row.id, exc_info=True)
-            raise HTTPException(status_code=502, detail="Could not update document tags.") from None
-        row.tags = json.dumps(tags) if tags else None
-
-    if body.metadata is not None:
-        row.custom_metadata = json.dumps(body.metadata) if body.metadata else None
-
-    db.commit()
-    db.refresh(row)
-
-    def _count() -> int:
-        if row.status != "ready":
-            return 0
-        try:
-            return build_components().vector_store.count_document_chunks(
-                row.id, metadata_filter={"user_id": current_user.id}
-            )
-        except Exception:
-            logger.warning("Chunk count failed for document %s", row.id, exc_info=True)
-            return 0
-
-    chunk_count = await asyncio.to_thread(_count)
-    return _document_response(
-        row,
-        chunk_count=chunk_count,
-        file_size=_stored_file_size(row.file_path),
-    )
 
 @router.get("/documents/download/{document_id}", summary="Download a document")
 async def get_document(document_id: str,current_user: UserInDB = Depends(get_current_user),db: Session = Depends(get_db)):

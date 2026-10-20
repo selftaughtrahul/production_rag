@@ -585,27 +585,6 @@ button.doc-name:hover { text-decoration: underline; }
   .doc-actions { justify-content: flex-start; }
 }
 
-/* Chat tag filter */
-.gpt-tags {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.gpt-tags-label {
-  flex-shrink: 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.gpt-tags .chips {
-  flex: 1;
-  min-height: 36px;
-  border-radius: 18px;
-  padding: 3px 10px;
-}
-
 /* Dashboard monitoring */
 .monitor-grid {
   display: grid;
